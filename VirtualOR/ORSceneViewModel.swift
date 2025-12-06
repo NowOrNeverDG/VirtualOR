@@ -29,6 +29,11 @@ class ORSceneViewModel: ObservableObject {
         return nil
     }
     
+    func getRoomEntity() -> Entity? {
+        return rootEntity
+    }
+    
+    
 }
 
 // Mark:  Private function
