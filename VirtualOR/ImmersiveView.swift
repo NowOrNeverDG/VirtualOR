@@ -15,18 +15,30 @@ struct ImmersiveView: View {
 
     var body: some View {
         RealityView { content in
-            if let roomEtt = try? await Entity(named: "ORScene", in: realityKitContentBundle) {
-                roomEtt.generateCollisionShapes(recursive: true)
-                content.add(roomEtt)
-                roomEtt.components.set(InputTargetComponent())
-
-                if let ventTrigManual = roomEtt.findEntity(named: "ventilate_trigger_manual") {
-                    print("ORScene")
-                }
+            guard let rootEntity = await viewModel.loadRoomIfNeeded() else {
+                return
             }
+            content.add(rootEntity)
+            
+            if let wall = rootEntity.findEntity(named: "wall_1") {
+                wall.components.remove(CollisionComponent.self)
+                wall.isEnabled = false
+            }
+            
+            
+            if let cabinet = rootEntity.findEntity(named: "cabinet_1") {
+                cabinet.components.remove(CollisionComponent.self)
+                cabinet.isEnabled = false
+            }
+
+            
         }
         .gesture(TapGesture().targetedToAnyEntity().onEnded { value in
-            print(value.entity.name ?? "no name")
+            print("Moscot:\(value.entity.name)")
+            guard let rootEntity = viewModel.getRoomEntity() else {
+                return
+            }
+            print("Moscot:\(value.entity.position(relativeTo: rootEntity))")
         })
     }
 }
