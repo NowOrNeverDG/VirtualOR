@@ -36,7 +36,12 @@ class ORSceneViewModel: ObservableObject {
     
 }
 
-// Mark:  Private function
-extension ORSceneViewModel {
+/*
+ 展开：pipe_1 pipe_2 pipe_connection
+ 卷起：bent_pipe
+ 
+ 抽屉：drawer_1 drawer_2 drawer_3 drawer_4 drawer_5
+ 
+ 麻醉气体调节按钮：Knob_001
+*/
 
-}
