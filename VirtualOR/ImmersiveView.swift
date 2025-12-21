@@ -38,7 +38,7 @@ struct ImmersiveView: View {
             guard let rootEntity = viewModel.getRoomEntity() else {
                 return
             }
-            print("Moscot:\(value.entity.position(relativeTo: rootEntity))")
+            viewModel.printWorldPosition(of: value.entity)
         })
     }
 }

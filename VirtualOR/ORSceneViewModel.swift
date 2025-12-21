@@ -24,7 +24,7 @@ class ORSceneViewModel: ObservableObject {
             self.rootEntity = room
             return rootEntity
         } catch {
-            print("Error:[ORSceneViewModel] Failed to load ORScene:", error)
+            print("Error:[ORSceneViewModel.loadRoomIfNeeded] Failed to load ORScene:", error)
         }
         return nil
     }
@@ -33,7 +33,17 @@ class ORSceneViewModel: ObservableObject {
         return rootEntity
     }
     
+    func getWorldPosition(of entity: Entity) -> SIMD3<Float>? {
+        return entity.position(relativeTo: nil)
+    }
     
+    func printWorldPosition(of entity: Entity) {
+        if let position = getWorldPosition(of: entity) {
+            print("World position: \(position)")
+        } else {
+            print("Error: [ORSceneViewModel.printWorldPosition] Can't not find World position")
+        }
+    }
 }
 
 // Mark:  Private function
