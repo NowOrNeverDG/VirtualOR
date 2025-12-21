@@ -33,8 +33,27 @@ class ORSceneViewModel: ObservableObject {
         return rootEntity
     }
     
+    func generateAllCollisionShapes() {
+        makeEntitiesCollidable(CollidableEntities.rollUpPipes)
+        makeEntitiesCollidable(CollidableEntities.bentPipes)
+        makeEntitiesCollidable(CollidableEntities.drawer)
+        makeEntitiesCollidable(CollidableEntities.AnesAdjustButton)
+    }
+    
     
 }
+
+extension ORSceneViewModel {
+    private func makeEntitiesCollidable(_ names: [String]) {
+        for str in names {
+            if let wall = rootEntity?.findEntity(named: str) {
+                wall.components.remove(CollisionComponent.self)
+                wall.isEnabled = false
+            }
+        }
+    }
+}
+
 
 /*
  展开：pipe_1 pipe_2 pipe_connection
@@ -44,4 +63,11 @@ class ORSceneViewModel: ObservableObject {
  
  麻醉气体调节按钮：Knob_001
 */
-
+struct CollidableEntities {
+    static var rollUpPipes: [String] = ["pipe_1","pipe_2","pipe_connection"]
+    static var bentPipes: [String] = ["bent_pipe"]
+    
+    static var drawer: [String] = ["drawer_1","drawer_2","drawer_3","drawer_4","drawer_5"]
+    
+    static var AnesAdjustButton: [String] = ["Knob_001"]
+}
