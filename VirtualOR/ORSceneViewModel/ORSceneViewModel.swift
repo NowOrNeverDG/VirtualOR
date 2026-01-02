@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import RealityFoundation
+import RealityKit
 import RealityKitContent
 import _RealityKit_SwiftUI
 
@@ -33,15 +33,9 @@ class ORSceneViewModel: ObservableObject {
         return rootEntity
     }
     
-    func generateAllCollisionShapes() {
-        makeEntitiesCollidable(CollidableEntities.rollUpPipes)
-        makeEntitiesCollidable(CollidableEntities.bentPipes)
-        makeEntitiesCollidable(CollidableEntities.drawer)
-        makeEntitiesCollidable(CollidableEntities.AnesAdjustButton)
     func getWorldPosition(of entity: Entity) -> SIMD3<Float>? {
         return entity.position(relativeTo: nil)
     }
-    
     
     func printWorldPosition(of entity: Entity) {
         if let position = getWorldPosition(of: entity) {
@@ -49,6 +43,13 @@ class ORSceneViewModel: ObservableObject {
         } else {
             print("Error: [ORSceneViewModel.printWorldPosition] Can't not find World position")
         }
+    }
+    
+    func generateAllCollisionShapes() {
+        makeEntitiesCollidable(CollidableEntities.rollUpPipes)
+        makeEntitiesCollidable(CollidableEntities.bentPipes)
+        makeEntitiesCollidable(CollidableEntities.drawer)
+        makeEntitiesCollidable(CollidableEntities.AnesAdjustButton)
     }
 }
 

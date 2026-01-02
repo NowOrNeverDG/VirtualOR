@@ -19,19 +19,8 @@ struct ImmersiveView: View {
                 return
             }
             content.add(rootEntity)
-            
-            if let wall = rootEntity.findEntity(named: "wall_1") {
-                wall.components.remove(CollisionComponent.self)
-                wall.isEnabled = false
-            }
-            
-            
-            if let cabinet = rootEntity.findEntity(named: "cabinet_1") {
-                cabinet.components.remove(CollisionComponent.self)
-                cabinet.isEnabled = false
-            }
 
-            
+            viewModel.generateAllCollisionShapes()
         }
         .gesture(TapGesture().targetedToAnyEntity().onEnded { value in
             print("Moscot:\(value.entity.name)")
