@@ -20,7 +20,6 @@ class ORSceneViewModel: ObservableObject {
         do {
             let room = try await Entity(named: "ORScene", in: realityKitContentBundle)
             await room.generateCollisionShapes(recursive: true)
-            await room.components.set(InputTargetComponent())
             self.rootEntity = room
             return rootEntity
         } catch {
@@ -37,28 +36,62 @@ class ORSceneViewModel: ObservableObject {
         return entity.position(relativeTo: nil)
     }
     
-    func printWorldPosition(of entity: Entity) {
-        if let position = getWorldPosition(of: entity) {
-            print("World position: \(position)")
-        } else {
-            print("Error: [ORSceneViewModel.printWorldPosition] Can't not find World position")
-        }
-    }
-    
     func generateAllCollisionShapes() {
         makeEntitiesCollidable(CollidableEntities.rollUpPipes)
         makeEntitiesCollidable(CollidableEntities.bentPipes)
         makeEntitiesCollidable(CollidableEntities.drawer)
         makeEntitiesCollidable(CollidableEntities.AnesAdjustButton)
     }
+    
+    func handleTapGesture(entity: Entity) {
+        guard let name = entity.name as String? else { return }
+        print("Tapped entity: \(name)")
+        
+        switch name {
+        case "drawer_1":
+            moveXInWorld(entity, delta: 0.1)
+        default:
+            break
+        }
+    }
+    
+    func moveXInWorld(_ entity: Entity, delta: Float) {
+        var transform = entity.transform
+        let oldPosition = transform.translation
+        transform.translation.x += delta
+        entity.move(to: transform, relativeTo: entity.parent, duration: 0, timingFunction: .linear)
+        print("[\(entity.name)] Moved X: \(oldPosition.x) -> \(transform.translation.x)")
+    }
+    
+    func moveInWorld(_ entity: Entity, delta: SIMD3<Float>) {
+        var transform = entity.transform
+        let oldPosition = transform.translation
+        transform.translation += delta
+        entity.move(to: transform, relativeTo: entity.parent, duration: 0, timingFunction: .linear)
+        print("[\(entity.name)] Moved: \(oldPosition) -> \(transform.translation)")
+    }
 }
 
 extension ORSceneViewModel {
     private func makeEntitiesCollidable(_ names: [String]) {
-        for str in names {
-            if let wall = rootEntity?.findEntity(named: str) {
-                wall.components.remove(CollisionComponent.self)
-                wall.isEnabled = false
+        guard let rootEntity = rootEntity else { return }
+        
+        for name in names {
+            guard let entity = rootEntity.findEntity(named: name) else {
+                print("⚠️ [ORSceneViewModel] Entity named \(name) not found under rootEntity")
+                continue
+            }
+            
+            entity.isEnabled = true
+            
+            if entity.components[CollisionComponent.self] == nil {
+                let shape = ShapeResource.generateBox(size: .one)
+                let collision = CollisionComponent(shapes: [shape])
+                entity.components.set(collision)
+            }
+            
+            if entity.components[InputTargetComponent.self] == nil {
+                entity.components.set(InputTargetComponent())
             }
         }
     }

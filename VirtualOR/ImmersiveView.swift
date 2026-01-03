@@ -23,11 +23,11 @@ struct ImmersiveView: View {
             viewModel.generateAllCollisionShapes()
         }
         .gesture(TapGesture().targetedToAnyEntity().onEnded { value in
-            print("Moscot:\(value.entity.name)")
-            guard let rootEntity = viewModel.getRoomEntity() else {
+            guard let _ = viewModel.getRoomEntity() else {
                 return
             }
             viewModel.printWorldPosition(of: value.entity)
+            viewModel.handleTapGesture(entity: value.entity)
         })
     }
 }
