@@ -17,6 +17,9 @@ class ORSceneViewModel: ObservableObject {
     private var drawerStates: [String: Bool] = [:]
     private let drawerOpenDistance: Float = 1  // 打开时的 Y 轴移动距离
     
+    // 记录管子的展开/卷起状态
+    private var isPipesExpanded: Bool = false
+    
     @discardableResult
     func loadRoomIfNeeded() async -> Entity? {
         if rootEntity != nil { return rootEntity }
@@ -45,6 +48,10 @@ class ORSceneViewModel: ObservableObject {
         makeEntitiesCollidable(CollidableEntities.bentPipes)
         makeEntitiesCollidable(CollidableEntities.drawer)
         makeEntitiesCollidable(CollidableEntities.AnesAdjustButton)
+        
+        // 初始状态：隐藏展开的管子，只显示卷起的管子
+        hideEntities(CollidableEntities.rollUpPipes)
+        isPipesExpanded = false
     }
     
     func handleTapGesture(entity: Entity) {
@@ -54,10 +61,34 @@ class ORSceneViewModel: ObservableObject {
         switch name {
         case "drawer_1", "drawer_2", "drawer_3", "drawer_4", "drawer_5":
             toggleDrawer(entity)
-        case "pipe_1","pipe_2","pipe_connection":
-            break
+        case "bent_pipe":
+            // 点击卷起的管子，展开它
+            expandPipes()
+        case "pipe_1", "pipe_2", "pipe_connection":
+            // 点击任意展开的管子，卷起所有管子
+            collapsePipes()
         default:
             break
+        }
+    }
+    
+    // 展开管子
+    private func expandPipes() {
+        if !isPipesExpanded {
+            showEntities(CollidableEntities.rollUpPipes)
+            hideEntities(CollidableEntities.bentPipes)
+            isPipesExpanded = true
+            print("[Pipes] Expanded")
+        }
+    }
+    
+    // 卷起管子
+    private func collapsePipes() {
+        if isPipesExpanded {
+            hideEntities(CollidableEntities.rollUpPipes)
+            showEntities(CollidableEntities.bentPipes)
+            isPipesExpanded = false
+            print("[Pipes] Collapsed")
         }
     }
     
@@ -145,6 +176,30 @@ extension ORSceneViewModel {
             if entity.components[InputTargetComponent.self] == nil {
                 entity.components.set(InputTargetComponent())
             }
+        }
+    }
+    
+    private func hideEntities(_ names: [String]) {
+        guard let rootEntity = rootEntity else { return }
+        
+        for name in names {
+            guard let entity = rootEntity.findEntity(named: name) else {
+                print("⚠️ [ORSceneViewModel] Entity named \(name) not found for hiding")
+                continue
+            }
+            entity.isEnabled = false
+        }
+    }
+    
+    private func showEntities(_ names: [String]) {
+        guard let rootEntity = rootEntity else { return }
+        
+        for name in names {
+            guard let entity = rootEntity.findEntity(named: name) else {
+                print("⚠️ [ORSceneViewModel] Entity named \(name) not found for showing")
+                continue
+            }
+            entity.isEnabled = true
         }
     }
 }
