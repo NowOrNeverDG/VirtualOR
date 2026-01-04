@@ -15,10 +15,15 @@ class ORSceneViewModel: ObservableObject {
     
     // 记录每个 drawer 的打开状态
     private var drawerStates: [String: Bool] = [:]
-    private let drawerOpenDistance: Float = 1  // 打开时的 Y 轴移动距离
+    private let drawerOpenDistance: Float = 1  // 打开时的 Z 轴移动距离
     
     // 记录管子的展开/卷起状态
     private var isPipesExpanded: Bool = false
+    
+    // 记录创建的黑色 view（用于后续移除）
+    private var blackViewEntity: ModelEntity?
+    private let blackViewSize: SIMD3<Float> = [0.2, 0.2, 0.05]  // 宽、高、厚度
+    private let blackViewOffsetZ: Float = 5.0  // Z 方向偏移距离
     
     @discardableResult
     func loadRoomIfNeeded() async -> Entity? {
@@ -57,6 +62,9 @@ class ORSceneViewModel: ObservableObject {
     func handleTapGesture(entity: Entity) {
         guard let name = entity.name as String? else { return }
         print("Tapped entity: \(name)")
+        
+        // 在 entity 的 X 方向前面创建黑色 view
+        createBlackViewInFrontOfEntity(entity)
         
         switch name {
         case "drawer_1", "drawer_2", "drawer_3", "drawer_4", "drawer_5":
@@ -152,6 +160,48 @@ class ORSceneViewModel: ObservableObject {
         transform.translation += delta
         entity.move(to: transform, relativeTo: entity.parent, duration: 0, timingFunction: .linear)
         print("[\(entity.name)] Moved: \(oldPosition) -> \(transform.translation)")
+    }
+    
+    // 在 entity 的 Z 方向前面创建黑色 view
+    private func createBlackViewInFrontOfEntity(_ entity: Entity) {
+        guard let rootEntity = rootEntity else { return }
+        
+        // 移除之前的黑色 view
+        if let oldBlackView = blackViewEntity {
+            oldBlackView.removeFromParent()
+        }
+        
+        // 获取 entity 的世界坐标
+        let entityPosition = entity.position(relativeTo: nil)
+        
+        // 在 Z 方向前面计算黑色 view 的位置
+        var blackViewPosition = entityPosition
+        blackViewPosition.z += blackViewOffsetZ
+        
+        // 创建黑色平面
+        let blackView = ModelEntity(
+            mesh: .generateBox(size: [1.0, 1.0, 0.01]),
+            materials: [SimpleMaterial(color: .black, isMetallic: false)]
+        )
+        
+        // 设置黑色 view 的位置和大小
+        blackView.position = blackViewPosition
+        blackView.name = "BlackView"
+        
+        // 添加到场景
+        rootEntity.addChild(blackView)
+        self.blackViewEntity = blackView
+        
+        print("Black view created at position: \(blackViewPosition)")
+    }
+    
+    // 移除黑色 view
+    func removeBlackView() {
+        if let blackView = blackViewEntity {
+            blackView.removeFromParent()
+            blackViewEntity = nil
+            print("Black view removed")
+        }
     }
 }
 
