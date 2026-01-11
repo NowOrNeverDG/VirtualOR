@@ -20,23 +20,21 @@ class ORSceneViewModel: ObservableObject {
     // 记录管子的展开/卷起状态
     private var isPipesExpanded: Bool = false
     
-    // 记录创建的黑色 view（用于后续移除）
-    private var blackViewEntity: ModelEntity?
-    private let blackViewSize: SIMD3<Float> = [0.2, 0.2, 0.05]  // 宽、高、厚度
-    private let blackViewOffsetZ: Float = 5.0  // Z 方向偏移距离
-    
     @discardableResult
     func loadRoomIfNeeded() async -> Entity? {
         if rootEntity != nil { return rootEntity }
 
         do {
-            let room = try await Entity(named: "ORScene", in: realityKitContentBundle)
+            let room = try await Entity(named: "OR11299", in: realityKitContentBundle)
             await room.generateCollisionShapes(recursive: true)
             self.rootEntity = room
+            printAllEntities()
             return rootEntity
         } catch {
             print("Error:[ORSceneViewModel.loadRoomIfNeeded] Failed to load ORScene:", error)
         }
+        
+        
         return nil
     }
     
@@ -53,18 +51,16 @@ class ORSceneViewModel: ObservableObject {
         makeEntitiesCollidable(CollidableEntities.bentPipes)
         makeEntitiesCollidable(CollidableEntities.drawer)
         makeEntitiesCollidable(CollidableEntities.AnesAdjustButton)
-        
+        makeEntitiesCollidable([CollidableEntities.mainScreen, CollidableEntities.submainScreen])
         // 初始状态：隐藏展开的管子，只显示卷起的管子
         hideEntities(CollidableEntities.rollUpPipes)
+        showEntities(CollidableEntities.bentPipes)
         isPipesExpanded = false
     }
     
     func handleTapGesture(entity: Entity) {
         guard let name = entity.name as String? else { return }
         print("Tapped entity: \(name)")
-        
-        // 在 entity 的 X 方向前面创建黑色 view
-        createBlackViewInFrontOfEntity(entity)
         
         switch name {
         case "drawer_1", "drawer_2", "drawer_3", "drawer_4", "drawer_5":
@@ -83,8 +79,8 @@ class ORSceneViewModel: ObservableObject {
     // 展开管子
     private func expandPipes() {
         if !isPipesExpanded {
-            showEntities(CollidableEntities.rollUpPipes)
             hideEntities(CollidableEntities.bentPipes)
+            showEntities(CollidableEntities.rollUpPipes)
             isPipesExpanded = true
             print("[Pipes] Expanded")
         }
@@ -161,48 +157,6 @@ class ORSceneViewModel: ObservableObject {
         entity.move(to: transform, relativeTo: entity.parent, duration: 0, timingFunction: .linear)
         print("[\(entity.name)] Moved: \(oldPosition) -> \(transform.translation)")
     }
-    
-    // 在 entity 的 Z 方向前面创建黑色 view
-    private func createBlackViewInFrontOfEntity(_ entity: Entity) {
-        guard let rootEntity = rootEntity else { return }
-        
-        // 移除之前的黑色 view
-        if let oldBlackView = blackViewEntity {
-            oldBlackView.removeFromParent()
-        }
-        
-        // 获取 entity 的世界坐标
-        let entityPosition = entity.position(relativeTo: nil)
-        
-        // 在 Z 方向前面计算黑色 view 的位置
-        var blackViewPosition = entityPosition
-        blackViewPosition.z += blackViewOffsetZ
-        
-        // 创建黑色平面
-        let blackView = ModelEntity(
-            mesh: .generateBox(size: [1.0, 1.0, 0.01]),
-            materials: [SimpleMaterial(color: .black, isMetallic: false)]
-        )
-        
-        // 设置黑色 view 的位置和大小
-        blackView.position = blackViewPosition
-        blackView.name = "BlackView"
-        
-        // 添加到场景
-        rootEntity.addChild(blackView)
-        self.blackViewEntity = blackView
-        
-        print("Black view created at position: \(blackViewPosition)")
-    }
-    
-    // 移除黑色 view
-    func removeBlackView() {
-        if let blackView = blackViewEntity {
-            blackView.removeFromParent()
-            blackViewEntity = nil
-            print("Black view removed")
-        }
-    }
 }
 
 extension ORSceneViewModel {
@@ -252,6 +206,57 @@ extension ORSceneViewModel {
             entity.isEnabled = true
         }
     }
+    
+    
+    
+    // 打印所有 room 的 entity 及其层级结构
+    func printAllEntities() {
+        guard let rootEntity = rootEntity else {
+            print("⚠️ [ORSceneViewModel] Root entity is nil")
+            return
+        }
+        print("========== All Entities in Room ==========")
+        printEntityHierarchy(rootEntity, indent: "")
+        print("========== End of Entities ==========")
+    }
+    
+    // 递归打印 entity 层级（简洁版本）
+    private func printEntityHierarchy(_ entity: Entity, indent: String) {
+        print("\(indent)📦 \(entity.name)")
+        
+        // 递归打印子 entity
+        for child in entity.children {
+            printEntityHierarchy(child, indent: indent + "  ")
+        }
+    }
+    
+    // 打印所有子件的名称列表（平铺版本）
+    func printAllEntityNames() {
+        guard let rootEntity = rootEntity else {
+            print("⚠️ [ORSceneViewModel] Root entity is nil")
+            return
+        }
+        
+        var entityNames: [String] = []
+        collectEntityNames(rootEntity, into: &entityNames)
+        
+        print("========== All Entity Names ==========")
+        for name in entityNames {
+            print("- \(name)")
+        }
+        print("========== Total: \(entityNames.count) entities ==========")
+    }
+    
+    // 收集所有 entity 的名称
+    private func collectEntityNames(_ entity: Entity, into names: inout [String]) {
+        if !entity.name.isEmpty {
+            names.append(entity.name)
+        }
+        
+        for child in entity.children {
+            collectEntityNames(child, into: &names)
+        }
+    }
 }
 
 
@@ -270,4 +275,6 @@ struct CollidableEntities {
     static var drawer: [String] = ["drawer_1","drawer_2","drawer_3","drawer_4","drawer_5"]
     
     static var AnesAdjustButton: [String] = ["Knob_001"]
+    static var mainScreen: String = "Monitor_1_003"
+    static var submainScreen: String = "Monitor_1_004"
 }
