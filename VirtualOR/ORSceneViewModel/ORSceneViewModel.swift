@@ -25,15 +25,13 @@ class ORSceneViewModel: ObservableObject {
         if rootEntity != nil { return rootEntity }
 
         do {
-            let room = try await Entity(named: "OR11299", in: realityKitContentBundle)
+            let room = try await Entity(named: "ORScene", in: realityKitContentBundle)
             await room.generateCollisionShapes(recursive: true)
             self.rootEntity = room
-            printAllEntities()
             return rootEntity
         } catch {
             print("Error:[ORSceneViewModel.loadRoomIfNeeded] Failed to load ORScene:", error)
         }
-        
         
         return nil
     }
@@ -46,16 +44,10 @@ class ORSceneViewModel: ObservableObject {
         return entity.position(relativeTo: nil)
     }
     
-    func generateAllCollisionShapes() {
-        makeEntitiesCollidable(CollidableEntities.rollUpPipes)
-        makeEntitiesCollidable(CollidableEntities.bentPipes)
-        makeEntitiesCollidable(CollidableEntities.drawer)
-        makeEntitiesCollidable(CollidableEntities.AnesAdjustButton)
-        makeEntitiesCollidable([CollidableEntities.mainScreen, CollidableEntities.submainScreen])
-        // 初始状态：隐藏展开的管子，只显示卷起的管子
-        hideEntities(CollidableEntities.rollUpPipes)
-        showEntities(CollidableEntities.bentPipes)
-        isPipesExpanded = false
+    func prepareForRoom() {
+        //Set
+        generateAllCollisionShapes()
+        initiatePipeStatus()
     }
     
     func handleTapGesture(entity: Entity) {
@@ -66,17 +58,31 @@ class ORSceneViewModel: ObservableObject {
         case "drawer_1", "drawer_2", "drawer_3", "drawer_4", "drawer_5":
             toggleDrawer(entity)
         case "bent_pipe":
-            // 点击卷起的管子，展开它
             expandPipes()
         case "pipe_1", "pipe_2", "pipe_connection":
-            // 点击任意展开的管子，卷起所有管子
             collapsePipes()
         default:
             break
         }
     }
     
-    // 展开管子
+    
+    private func generateAllCollisionShapes() {
+        makeEntitiesCollidable(CollidableEntities.rollUpPipes)
+        makeEntitiesCollidable(CollidableEntities.bentPipes)
+        makeEntitiesCollidable(CollidableEntities.drawer)
+        makeEntitiesCollidable(CollidableEntities.AnesAdjustButton)
+        makeEntitiesCollidable([CollidableEntities.mainScreen, CollidableEntities.submainScreen])
+    }
+    
+    
+    //MARK: PiPes Logic
+    private func initiatePipeStatus() {
+        hideEntities(CollidableEntities.rollUpPipes)
+        showEntities(CollidableEntities.bentPipes)
+        isPipesExpanded = false
+    }
+    
     private func expandPipes() {
         if !isPipesExpanded {
             hideEntities(CollidableEntities.bentPipes)
@@ -86,7 +92,6 @@ class ORSceneViewModel: ObservableObject {
         }
     }
     
-    // 卷起管子
     private func collapsePipes() {
         if isPipesExpanded {
             hideEntities(CollidableEntities.rollUpPipes)
@@ -96,7 +101,7 @@ class ORSceneViewModel: ObservableObject {
         }
     }
     
-    // 切换 drawer 的打开/关闭状态
+    //MARK: Drawer Logic
     private func toggleDrawer(_ entity: Entity) {
         let entityName = entity.name
         let isCurrentlyOpen = drawerStates[entityName] ?? false
@@ -206,57 +211,6 @@ extension ORSceneViewModel {
             entity.isEnabled = true
         }
     }
-    
-    
-    
-    // 打印所有 room 的 entity 及其层级结构
-    func printAllEntities() {
-        guard let rootEntity = rootEntity else {
-            print("⚠️ [ORSceneViewModel] Root entity is nil")
-            return
-        }
-        print("========== All Entities in Room ==========")
-        printEntityHierarchy(rootEntity, indent: "")
-        print("========== End of Entities ==========")
-    }
-    
-    // 递归打印 entity 层级（简洁版本）
-    private func printEntityHierarchy(_ entity: Entity, indent: String) {
-        print("\(indent)📦 \(entity.name)")
-        
-        // 递归打印子 entity
-        for child in entity.children {
-            printEntityHierarchy(child, indent: indent + "  ")
-        }
-    }
-    
-    // 打印所有子件的名称列表（平铺版本）
-    func printAllEntityNames() {
-        guard let rootEntity = rootEntity else {
-            print("⚠️ [ORSceneViewModel] Root entity is nil")
-            return
-        }
-        
-        var entityNames: [String] = []
-        collectEntityNames(rootEntity, into: &entityNames)
-        
-        print("========== All Entity Names ==========")
-        for name in entityNames {
-            print("- \(name)")
-        }
-        print("========== Total: \(entityNames.count) entities ==========")
-    }
-    
-    // 收集所有 entity 的名称
-    private func collectEntityNames(_ entity: Entity, into names: inout [String]) {
-        if !entity.name.isEmpty {
-            names.append(entity.name)
-        }
-        
-        for child in entity.children {
-            collectEntityNames(child, into: &names)
-        }
-    }
 }
 
 
@@ -274,7 +228,7 @@ struct CollidableEntities {
     
     static var drawer: [String] = ["drawer_1","drawer_2","drawer_3","drawer_4","drawer_5"]
     
-    static var AnesAdjustButton: [String] = ["Knob_001"]
+    static var AnesAdjustButton: [String] = ["knob_001, knob"]//knob_001 旋转钮，knob 扳机钮
     static var mainScreen: String = "Monitor_1_003"
     static var submainScreen: String = "Monitor_1_004"
 }

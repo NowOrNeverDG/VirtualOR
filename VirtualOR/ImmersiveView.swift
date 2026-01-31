@@ -19,8 +19,7 @@ struct ImmersiveView: View {
                 return
             }
             content.add(rootEntity)
-
-            viewModel.generateAllCollisionShapes()
+            viewModel.prepareForRoom()
         }
         .gesture(TapGesture().targetedToAnyEntity().onEnded { value in
             guard let _ = viewModel.getRoomEntity() else {
