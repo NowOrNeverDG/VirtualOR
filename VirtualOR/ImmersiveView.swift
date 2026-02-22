@@ -11,7 +11,7 @@ import RealityKitContent
 
 struct ImmersiveView: View {
     @Environment(AppModel.self) var appModel
-    @StateObject private var viewModel = ORSceneViewModel()
+    @State private var viewModel = ORSceneViewModel()
 
     var body: some View {
         RealityView { content in
@@ -22,9 +22,6 @@ struct ImmersiveView: View {
             viewModel.prepareForRoom()
         }
         .gesture(TapGesture().targetedToAnyEntity().onEnded { value in
-            guard let _ = viewModel.getRoomEntity() else {
-                return
-            }
             viewModel.printWorldPosition(of: value.entity)
             viewModel.handleTapGesture(entity: value.entity)
         })

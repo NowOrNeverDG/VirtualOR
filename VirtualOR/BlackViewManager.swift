@@ -9,6 +9,7 @@ import Foundation
 import RealityKit
 import UIKit
 
+@MainActor
 class BlackViewManager {
     private weak var rootEntity: Entity?
     private var blackView: ModelEntity?

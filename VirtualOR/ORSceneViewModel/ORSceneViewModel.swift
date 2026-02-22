@@ -9,15 +9,19 @@ import Foundation
 import RealityKit
 import RealityKitContent
 import _RealityKit_SwiftUI
+import os
 
-class ORSceneViewModel: ObservableObject {
-    @Published var rootEntity: Entity?
+private let logger = Logger(subsystem: "com.app.VirtualOR", category: "ORScene")
+
+@MainActor
+@Observable
+class ORSceneViewModel {
+    private(set) var rootEntity: Entity?
+    var loadError: Error?
     
-    // 记录每个 drawer 的打开状态
     private var drawerStates: [String: Bool] = [:]
-    private let drawerOpenDistance: Float = 1  // 打开时的 Z 轴移动距离
+    private let drawerOpenDistance: Float = 1
     
-    // 记录管子的展开/卷起状态
     private var isPipesExpanded: Bool = false
     
     @discardableResult
@@ -25,12 +29,12 @@ class ORSceneViewModel: ObservableObject {
         if rootEntity != nil { return rootEntity }
 
         do {
-            let room = try await Entity(named: "ORScene", in: realityKitContentBundle)
-            await room.generateCollisionShapes(recursive: true)
-            self.rootEntity = room
+            self.rootEntity = try await Entity(named: "ORScene", in: realityKitContentBundle)
+            self.rootEntity?.generateCollisionShapes(recursive: true)
             return rootEntity
         } catch {
-            print("Error:[ORSceneViewModel.loadRoomIfNeeded] Failed to load ORScene:", error)
+            logger.error("Failed to load ORScene: \(error.localizedDescription)")
+            self.loadError = error
         }
         
         return nil
@@ -45,14 +49,16 @@ class ORSceneViewModel: ObservableObject {
     }
     
     func prepareForRoom() {
-        //Set
+        /// Initialize collidable entities
         generateAllCollisionShapes()
+        
+        /// Initialize pipe status
         initiatePipeStatus()
     }
     
     func handleTapGesture(entity: Entity) {
-        guard let name = entity.name as String? else { return }
-        print("Tapped entity: \(name)")
+        let name = entity.name
+        logger.debug("Tapped entity: \(name)")
         
         switch name {
         case "drawer_1", "drawer_2", "drawer_3", "drawer_4", "drawer_5":
@@ -68,37 +74,27 @@ class ORSceneViewModel: ObservableObject {
     
     
     private func generateAllCollisionShapes() {
-        makeEntitiesCollidable(CollidableEntities.rollUpPipes)
-        makeEntitiesCollidable(CollidableEntities.bentPipes)
+        makeEntitiesCollidable(CollidableEntities.suctionExpanded)
+        makeEntitiesCollidable(CollidableEntities.suctionCollapsed)
         makeEntitiesCollidable(CollidableEntities.drawer)
-        makeEntitiesCollidable(CollidableEntities.AnesAdjustButton)
+        makeEntitiesCollidable(CollidableEntities.anesAdjustButton)
         makeEntitiesCollidable([CollidableEntities.mainScreen, CollidableEntities.submainScreen])
     }
     
     
     //MARK: PiPes Logic
     private func initiatePipeStatus() {
-        hideEntities(CollidableEntities.rollUpPipes)
-        showEntities(CollidableEntities.bentPipes)
-        isPipesExpanded = false
+        hideEntities(CollidableEntities.suctionExpanded)
     }
     
     private func expandPipes() {
-        if !isPipesExpanded {
-            hideEntities(CollidableEntities.bentPipes)
-            showEntities(CollidableEntities.rollUpPipes)
-            isPipesExpanded = true
-            print("[Pipes] Expanded")
-        }
+        hideEntities(CollidableEntities.suctionCollapsed)
+        showEntities(CollidableEntities.suctionExpanded)
     }
     
     private func collapsePipes() {
-        if isPipesExpanded {
-            hideEntities(CollidableEntities.rollUpPipes)
-            showEntities(CollidableEntities.bentPipes)
-            isPipesExpanded = false
-            print("[Pipes] Collapsed")
-        }
+        hideEntities(CollidableEntities.suctionExpanded)
+        showEntities(CollidableEntities.suctionCollapsed)
     }
     
     //MARK: Drawer Logic
@@ -115,52 +111,30 @@ class ORSceneViewModel: ObservableObject {
         }
     }
     
-    // 打开 drawer（Z 轴正方向移动）
     private func openDrawer(_ entity: Entity) {
         let entityName = entity.name
-        moveZInWorld(entity, delta: -drawerOpenDistance)
+        moveEntity(entity, axis: .z, delta: -drawerOpenDistance)
         drawerStates[entityName] = true
-        print("[\(entityName)] Drawer opened")
+        logger.debug("[\(entityName)] Drawer opened")
     }
     
-    // 关闭 drawer（Z 轴负方向移动回原位）
     private func closeDrawer(_ entity: Entity) {
         let entityName = entity.name
-        moveZInWorld(entity, delta: drawerOpenDistance)
+        moveEntity(entity, axis: .z, delta: drawerOpenDistance)
         drawerStates[entityName] = false
-        print("[\(entityName)] Drawer closed")
+        logger.debug("[\(entityName)] Drawer closed")
     }
     
-    func moveXInWorld(_ entity: Entity, delta: Float) {
-        var transform = entity.transform
-        let oldPosition = transform.translation
-        transform.translation.x += delta
-        entity.move(to: transform, relativeTo: entity.parent, duration: 0, timingFunction: .linear)
-        print("[\(entity.name)] Moved X: \(oldPosition.x) -> \(transform.translation.x)")
-    }
+    private enum Axis { case x, y, z }
     
-    func moveYInWorld(_ entity: Entity, delta: Float) {
+    private func moveEntity(_ entity: Entity, axis: Axis, delta: Float) {
         var transform = entity.transform
-        let oldPosition = transform.translation
-        transform.translation.y += delta
+        switch axis {
+        case .x: transform.translation.x += delta
+        case .y: transform.translation.y += delta
+        case .z: transform.translation.z += delta
+        }
         entity.move(to: transform, relativeTo: entity.parent, duration: 0, timingFunction: .linear)
-        print("[\(entity.name)] Moved Y: \(oldPosition.y) -> \(transform.translation.y)")
-    }
-    
-    func moveZInWorld(_ entity: Entity, delta: Float) {
-        var transform = entity.transform
-        let oldPosition = transform.translation
-        transform.translation.z += delta
-        entity.move(to: transform, relativeTo: entity.parent, duration: 0, timingFunction: .linear)
-        print("[\(entity.name)] Moved Z: \(oldPosition.z) -> \(transform.translation.z)")
-    }
-    
-    func moveInWorld(_ entity: Entity, delta: SIMD3<Float>) {
-        var transform = entity.transform
-        let oldPosition = transform.translation
-        transform.translation += delta
-        entity.move(to: transform, relativeTo: entity.parent, duration: 0, timingFunction: .linear)
-        print("[\(entity.name)] Moved: \(oldPosition) -> \(transform.translation)")
     }
 }
 
@@ -170,7 +144,7 @@ extension ORSceneViewModel {
         
         for name in names {
             guard let entity = rootEntity.findEntity(named: name) else {
-                print("⚠️ [ORSceneViewModel] Entity named \(name) not found under rootEntity")
+                logger.warning("Entity named \(name) not found under rootEntity")
                 continue
             }
             
@@ -193,7 +167,7 @@ extension ORSceneViewModel {
         
         for name in names {
             guard let entity = rootEntity.findEntity(named: name) else {
-                print("⚠️ [ORSceneViewModel] Entity named \(name) not found for hiding")
+                logger.warning("Entity named \(name) not found for hiding")
                 continue
             }
             entity.isEnabled = false
@@ -205,30 +179,10 @@ extension ORSceneViewModel {
         
         for name in names {
             guard let entity = rootEntity.findEntity(named: name) else {
-                print("⚠️ [ORSceneViewModel] Entity named \(name) not found for showing")
+                logger.warning("Entity named \(name) not found for showing")
                 continue
             }
             entity.isEnabled = true
         }
     }
-}
-
-
-/*
- 展开：pipe_1 pipe_2 pipe_connection
- 卷起：bent_pipe
- 
- 抽屉：drawer_1 drawer_2 drawer_3 drawer_4 drawer_5
- 
- 麻醉气体调节按钮：Knob_001
-*/
-struct CollidableEntities {
-    static var rollUpPipes: [String] = ["pipe_1","pipe_2","pipe_connection"]
-    static var bentPipes: [String] = ["bent_pipe"]
-    
-    static var drawer: [String] = ["drawer_1","drawer_2","drawer_3","drawer_4","drawer_5"]
-    
-    static var AnesAdjustButton: [String] = ["knob_001, knob"]//knob_001 旋转钮，knob 扳机钮
-    static var mainScreen: String = "Monitor_1_003"
-    static var submainScreen: String = "Monitor_1_004"
 }

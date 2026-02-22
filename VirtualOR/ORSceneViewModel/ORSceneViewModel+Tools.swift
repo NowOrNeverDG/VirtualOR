@@ -1,5 +1,5 @@
 //
-//  File.swift
+//  ORSceneViewModel+Tools.swift
 //  VirtualOR
 //
 //  Created by Ge Ding on 2026/1/3.
@@ -7,28 +7,32 @@
 
 import Foundation
 import RealityKit
+import os
+
+private let toolsLogger = Logger(subsystem: "com.app.VirtualOR", category: "ORSceneTools")
 
 extension ORSceneViewModel {
     func printWorldPosition(of entity: Entity) {
         if let position = getWorldPosition(of: entity) {
-            print("[printWorldPosition]: \(entity.name) World position: \(position)")
+            toolsLogger.debug("\(entity.name) World position: \(String(describing: position))")
         } else {
-            print("⚠️ [printWorldPosition] Can't not find World position")
+            toolsLogger.warning("Cannot find world position for entity")
         }
     }
     
+    #if DEBUG
     func printAllEntities() {
         guard let rootEntity = rootEntity else {
-            print("⚠️ [printAllEntities] Root entity is nil")
+            toolsLogger.warning("Root entity is nil")
             return
         }
-        print("========== All Entities in Room ========== [printAllEntities]")
+        print("========== All Entities in Room ==========")
         printEntityHierarchy(rootEntity, indent: "")
-        print("========== End of Entities ========== [printAllEntities]")
+        print("========== End of Entities ==========")
     }
     
     func printEntityHierarchy(_ entity: Entity, indent: String) {
-        print("[printEntityHierarchy]\(indent)📦 \(entity.name)")
+        print("\(indent) \(entity.name)")
 
         for child in entity.children {
             printEntityHierarchy(child, indent: indent + "  ")
@@ -37,21 +41,21 @@ extension ORSceneViewModel {
     
     func printAllEntityNames() {
         guard let rootEntity = rootEntity else {
-            print("⚠️ [printAllEntityNames] Root entity is nil")
+            toolsLogger.warning("Root entity is nil")
             return
         }
         
         var entityNames: [String] = []
         collectEntityNames(rootEntity, into: &entityNames)
         
-        print("========== All Entity Names ========== [printAllEntityNames]")
+        print("========== All Entity Names ==========")
         for name in entityNames {
             print("- \(name)")
         }
-        print("========== Total: \(entityNames.count) entities ========== [printAllEntityNames]")
+        print("========== Total: \(entityNames.count) entities ==========")
     }
     
-    func collectEntityNames(_ entity: Entity, into names: inout [String]) {
+    private func collectEntityNames(_ entity: Entity, into names: inout [String]) {
         if !entity.name.isEmpty {
             names.append(entity.name)
         }
@@ -60,4 +64,5 @@ extension ORSceneViewModel {
             collectEntityNames(child, into: &names)
         }
     }
+    #endif
 }
