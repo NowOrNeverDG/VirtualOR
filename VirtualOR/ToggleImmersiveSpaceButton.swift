@@ -6,6 +6,9 @@
 //
 
 import SwiftUI
+import os
+
+private let immersiveLogger = Logger(subsystem: "com.app.VirtualOR", category: "ImmersiveSpace")
 
 struct ToggleImmersiveSpaceButton: View {
 
@@ -39,19 +42,17 @@ private extension ToggleImmersiveSpaceButton {
 
             case .closed:
                 appModel.immersiveSpaceState = .inTransition
-                switch await openImmersiveSpace(id: appModel.immersiveSpaceID) {
+                let result = await openImmersiveSpace(id: appModel.immersiveSpaceID)
+                immersiveLogger.info("openImmersiveSpace result: \(String(describing: result))")
+                switch result {
                     case .opened:
-                        // Don't set immersiveSpaceState to .open because there
-                        // may be multiple paths to ImmersiveView.onAppear().
-                        // Only set .open in ImmersiveView.onAppear().
+                        immersiveLogger.info("Immersive space opened successfully")
                         break
 
                     case .userCancelled, .error:
-                        // On error, we need to mark the immersive space
-                        // as closed because it failed to open.
+                        immersiveLogger.error("Immersive space failed to open: \(String(describing: result))")
                         fallthrough
                     @unknown default:
-                        // On unknown response, assume space did not open.
                         appModel.immersiveSpaceState = .closed
                 }
 

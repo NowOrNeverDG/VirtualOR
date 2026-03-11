@@ -23,6 +23,7 @@ class ORSceneViewModel {
     private let drawerOpenDistance: Float = 1
     
     private var isPipesExpanded: Bool = false
+    private var screenOverlayManager: ScreenOverlayManager?
     
     @discardableResult
     func loadRoomIfNeeded() async -> Entity? {
@@ -49,12 +50,34 @@ class ORSceneViewModel {
     }
     
     func prepareForRoom() {
-        /// Initialize collidable entities
         generateAllCollisionShapes()
-        
-        /// Initialize pipe status
         initiatePipeStatus()
+
+        #if DEBUG
+        printAllEntities()
+        debugMarkScreens()
+        #endif
+
+        setupScreenOverlays()
     }
+
+    #if DEBUG
+    private func debugMarkScreens() {
+        guard let rootEntity else { return }
+        for name in [CollidableEntities.mainScreen, CollidableEntities.submainScreen] {
+            guard let entity = rootEntity.findEntity(named: name) else { continue }
+            let mesh = MeshResource.generateBox(size: SIMD3<Float>(1, 1, 1))
+            var material = UnlitMaterial()
+            material.color = .init(tint: .red)
+            let box = ModelEntity(mesh: mesh, materials: [material])
+            box.name = "DEBUG_\(name)"
+            entity.addChild(box)
+            box.position = .zero
+            let worldPos = entity.position(relativeTo: nil)
+            logger.info("DEBUG: \(name) worldPos=\(String(describing: worldPos))")
+        }
+    }
+    #endif
     
     func handleTapGesture(entity: Entity) {
         let name = entity.name
@@ -125,6 +148,57 @@ class ORSceneViewModel {
         logger.debug("[\(entityName)] Drawer closed")
     }
     
+    //MARK: - Screen Overlay
+    private func setupScreenOverlays() {
+        guard let rootEntity else {
+            logger.error("setupScreenOverlays: rootEntity is nil")
+            return
+        }
+
+        let manager = ScreenOverlayManager(rootEntity: rootEntity)
+        self.screenOverlayManager = manager
+
+        let standUp = simd_quatf(angle: -.pi / 2, axis: SIMD3(1, 0, 0))
+        let rotateZ = simd_quatf(angle: .pi / 2, axis: SIMD3(0, 0, 1))
+
+        let mainPanelConfig = ScreenOverlayManager.PanelConfig(
+            width: 3,
+            height: 2,
+            offset: SIMD3(0, 0, 0),
+            rotation: rotateZ * standUp
+        )
+
+        let mainLabels: [ScreenOverlayManager.LabelConfig] = [
+            .init(id: "hr",   text: "HR: 86次/分",        position: SIMD3(-1.2,  0.5, 0.05), fontSize: 0.2, color: .green),
+            .init(id: "spo2", text: "SPO2: 100%",         position: SIMD3(-1.2,  0,   0.05), fontSize: 0.2, color: .cyan),
+            .init(id: "nibp", text: "NIBP: 98/56mmHg",    position: SIMD3(-1.2, -0.5, 0.05), fontSize: 0.2, color: .white)
+        ]
+
+        manager.createOverlay(
+            for: CollidableEntities.mainScreen,
+            panel: mainPanelConfig,
+            labels: mainLabels
+        )
+
+        let subPanelConfig = ScreenOverlayManager.PanelConfig(
+            width: 3,
+            height: 2,
+            offset: SIMD3(0, 0, 0),
+            rotation: standUp
+        )
+
+        let subLabels: [ScreenOverlayManager.LabelConfig] = [
+            .init(id: "rr",   text: "RR: 20次/分",        position: SIMD3(-1.2,  0.3, 0.05), fontSize: 0.2, color: .yellow),
+            .init(id: "temp", text: "体温: 36.8℃",        position: SIMD3(-1.2, -0.3, 0.05), fontSize: 0.2, color: .white)
+        ]
+
+        manager.createOverlay(
+            for: CollidableEntities.submainScreen,
+            panel: subPanelConfig,
+            labels: subLabels
+        )
+    }
+
     private enum Axis { case x, y, z }
     
     private func moveEntity(_ entity: Entity, axis: Axis, delta: Float) {

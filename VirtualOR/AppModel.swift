@@ -6,8 +6,10 @@
 //
 
 import SwiftUI
+import os
 
-/// Maintains app-wide state
+private let logger = Logger(subsystem: "com.app.VirtualOR", category: "AppModel")
+
 @MainActor
 @Observable
 class AppModel {
@@ -18,4 +20,28 @@ class AppModel {
         case open
     }
     var immersiveSpaceState = ImmersiveSpaceState.closed
+
+    enum LoadingState {
+        case idle
+        case loading
+        case loaded
+        case failed(Error)
+    }
+    var loadingState = LoadingState.idle
+
+    func fetchInitialData() async {
+        guard case .idle = loadingState else { return }
+        loadingState = .loading
+
+        do {
+            // TODO: Replace with actual endpoint and response model
+            // let config: YourResponseModel = try await APIService.shared.request(
+            //     APIEndpoint(path: "/config")
+            // )
+            loadingState = .loaded
+        } catch {
+            logger.error("Failed to fetch initial data: \(error.localizedDescription)")
+            loadingState = .failed(error)
+        }
+    }
 }
