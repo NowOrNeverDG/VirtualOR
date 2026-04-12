@@ -23,6 +23,11 @@ class ORSceneViewModel {
     private let drawerOpenDistance: Float = 1
     
     private var isPipesExpanded: Bool = false
+
+    /// 当前手持的器械显示名，"nothing" 表示未持有
+    var holdingItem: String = "nothing"
+    /// 当前正在隐藏的器械组（用于换器械时恢复）
+    private var currentHeldGroup: CollidableEntities.InstrumentGroup?
     @discardableResult
     func loadRoomIfNeeded() async -> Entity? {
         if rootEntity != nil { return rootEntity }
@@ -69,7 +74,9 @@ class ORSceneViewModel {
         case "pipe_1", "pipe_2", "pipe_connection":
             collapsePipes()
         default:
-            break
+            if CollidableEntities.pickableInstruments.contains(name) {
+                pickUpInstrument(entity)
+            }
         }
     }
     
@@ -80,6 +87,7 @@ class ORSceneViewModel {
         makeEntitiesCollidable(CollidableEntities.drawer)
         makeEntitiesCollidable(CollidableEntities.anesAdjustButton)
         makeEntitiesCollidable([CollidableEntities.mainScreen, CollidableEntities.submainScreen])
+        makeEntitiesCollidable(CollidableEntities.pickableInstruments)
     }
     
     
@@ -98,6 +106,27 @@ class ORSceneViewModel {
         showEntities(CollidableEntities.suctionCollapsed)
     }
     
+    //MARK: Instrument Pickup Logic
+    private func pickUpInstrument(_ entity: Entity) {
+        guard let newGroup = CollidableEntities.entityToGroup[entity.name] else { return }
+
+        // 如果点击的是同一组器械，忽略
+        if let current = currentHeldGroup, current.displayName == newGroup.displayName {
+            return
+        }
+
+        // 恢复上一个器械组（显示回来）
+        if let previous = currentHeldGroup {
+            showEntities(previous.entityNames)
+        }
+
+        // 隐藏新器械的整组部件
+        hideEntities(newGroup.entityNames)
+        currentHeldGroup = newGroup
+        holdingItem = newGroup.displayName
+        logger.debug("Picked up instrument: \(self.holdingItem)")
+    }
+
     //MARK: Drawer Logic
     private func toggleDrawer(_ entity: Entity) {
         let entityName = entity.name

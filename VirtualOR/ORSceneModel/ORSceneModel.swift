@@ -97,4 +97,39 @@ enum CollidableEntities {
     static var submainScreen: String = Anes.submainScreen.rawValue
     static var anesMasked: [String] = [Anes.masked].map { $0.rawValue }
     static var anesUnmasked: [String] = [Anes.unmaskedPipe, Anes.unmaskedPart1, Anes.unmaskedPart2, Anes.unmaskedPart3, Anes.unmaskedPart4].map { $0.rawValue }
+
+    /// 器械分组：每组包含显示名称和所有部件实体名
+    struct InstrumentGroup {
+        let displayName: String
+        let entityNames: [String]
+    }
+
+    static let instrumentGroups: [InstrumentGroup] = [
+        InstrumentGroup(displayName: "Stethoscope", entityNames:
+            [Drawer.stethoscope1, .stethoscope2, .stethoscope3, .stethoscope4, .stethoscope5, .stethoscope6, .stethoscope7].map { $0.rawValue }),
+        InstrumentGroup(displayName: "Laryngoscope", entityNames:
+            [Drawer.laryngoscope1, .laryngoscope2, .laryngoscope3, .laryngoscope4].map { $0.rawValue }),
+        InstrumentGroup(displayName: "Oropharyngeal Tube", entityNames:
+            [Drawer.oropTube1, .oropTube2].map { $0.rawValue }),
+        InstrumentGroup(displayName: "Breathing Balloon", entityNames:
+            [Drawer.respBalloon1, .respBalloon2, .respBalloon3, .respBalloon4, .respBalloon5].map { $0.rawValue }),
+        InstrumentGroup(displayName: "Laryngeal Mask", entityNames:
+            [Drawer.laryngealMask1, .laryngealMask2, .laryngealMask3, .laryngealMask4].map { $0.rawValue }),
+        InstrumentGroup(displayName: "Laryngeal Duct", entityNames:
+            [Drawer.laryngealDuct1, .laryngealDuct2, .laryngealDuct3, .laryngealDuct4, .laryngealDuct5].map { $0.rawValue }),
+    ]
+
+    /// 所有可拾取的实体名（扁平列表，用于碰撞体生成）
+    static var pickableInstruments: [String] = instrumentGroups.flatMap { $0.entityNames }
+
+    /// 实体名 → 所属器械组（点击任一部件即可找到整组）
+    static var entityToGroup: [String: InstrumentGroup] = {
+        var map: [String: InstrumentGroup] = [:]
+        for group in instrumentGroups {
+            for name in group.entityNames {
+                map[name] = group
+            }
+        }
+        return map
+    }()
 }
