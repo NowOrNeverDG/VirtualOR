@@ -28,6 +28,44 @@ class ORSceneViewModel {
     var holdingItem: String = "nothing"
     /// 当前正在隐藏的器械组（用于换器械时恢复）
     private var currentHeldGroup: CollidableEntities.InstrumentGroup?
+
+    //MARK: Patient Vitals (HUD 实时显示)
+    // 默认值与 mock initialState.monitor 保持一致，scenario 加载完成后会被 applyMonitor 重新覆盖
+    var nibpSystolic: Int = 98       // 收缩压 mmHg
+    var nibpDiastolic: Int = 56      // 舒张压 mmHg
+    var spo2: Int = 100              // 血氧饱和度 %
+    var hr: Int = 86                 // 心率 次/分
+    var rr: Int = 20                 // 呼吸频率 次/分
+    var temperature: Double = 36.8   // 体温 ℃
+
+    //MARK: Scenario
+    /// 剧情数据，由 loadScenarioIfNeeded() 从 ScenarioService 拉取后赋值
+    private(set) var scenario: Scenario?
+
+    /// 幂等加载剧情数据（mock）。加载完会用 initialState.monitor 覆盖 6 个 vital。
+    func loadScenarioIfNeeded() async {
+        guard scenario == nil else { return }
+        do {
+            let s = try await ScenarioService.fetchMockScenario()
+            self.scenario = s
+            applyMonitor(s.initialState.monitor)
+            logger.info("Loaded scenario: \(s.title)")
+        } catch {
+            logger.error("Failed to load scenario: \(error.localizedDescription)")
+        }
+    }
+
+    /// 把 Monitor 里的值塞进 HUD 用的 6 个 vital 变量。
+    /// 后续状态切换 / operation effect 想刷新 HUD 都走这个入口。
+    func applyMonitor(_ monitor: Monitor) {
+        nibpSystolic = monitor.nibp.systolic
+        nibpDiastolic = monitor.nibp.diastolic
+        spo2 = monitor.spo2
+        hr = monitor.hr
+        rr = monitor.rr
+        temperature = monitor.temperature
+    }
+
     @discardableResult
     func loadRoomIfNeeded() async -> Entity? {
         if rootEntity != nil { return rootEntity }

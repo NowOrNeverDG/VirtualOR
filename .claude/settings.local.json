@@ -3,7 +3,11 @@
     "allow": [
       "Bash(git push:*)",
       "Bash(git lfs:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(git log *)",
+      "Bash(xargs git *)",
+      "Bash(git rm *)",
+      "Read(//Users/geding/Downloads/VRScene/**)"
     ]
   }
 }

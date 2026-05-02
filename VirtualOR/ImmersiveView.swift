@@ -24,6 +24,9 @@ struct ImmersiveView: View {
             content.add(rootEntity)
             viewModel.prepareForRoom()
 
+            // Load scenario mock data (populates HUD vitals from initialState.monitor)
+            await viewModel.loadScenarioIfNeeded()
+
             // Add HUD entity (will track head position)
             content.add(hudEntity)
 
@@ -40,13 +43,20 @@ struct ImmersiveView: View {
             // No dynamic updates needed
         } attachments: {
             Attachment(id: "hudText") {
-                Text("Hold: \(viewModel.holdingItem)")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.black.opacity(0.6))
-                    .cornerRadius(8)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Hold: \(viewModel.holdingItem)")
+                    Text("NIBP: \(viewModel.nibpSystolic)/\(viewModel.nibpDiastolic) mmHg")
+                    Text("SPO2: \(viewModel.spo2)%")
+                    Text("HR: \(viewModel.hr) 次/分")
+                    Text("RR: \(viewModel.rr) 次/分")
+                    Text(String(format: "体温: %.1f℃", viewModel.temperature))
+                }
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.black.opacity(0.6))
+                .cornerRadius(8)
             }
         }
         .gesture(TapGesture().targetedToAnyEntity().onEnded { value in
