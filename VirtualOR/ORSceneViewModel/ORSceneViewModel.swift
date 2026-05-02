@@ -94,16 +94,22 @@ class ORSceneViewModel {
     //MARK: PiPes Logic
     private func initiatePipeStatus() {
         hideEntities(CollidableEntities.suctionExpanded)
+        showEntities(CollidableEntities.suctionCollapsed)
+        isPipesExpanded = false
     }
-    
+
     private func expandPipes() {
+        guard !isPipesExpanded else { return }
         hideEntities(CollidableEntities.suctionCollapsed)
         showEntities(CollidableEntities.suctionExpanded)
+        isPipesExpanded = true
     }
-    
+
     private func collapsePipes() {
+        guard isPipesExpanded else { return }
         hideEntities(CollidableEntities.suctionExpanded)
         showEntities(CollidableEntities.suctionCollapsed)
+        isPipesExpanded = false
     }
     
     //MARK: Instrument Pickup Logic
