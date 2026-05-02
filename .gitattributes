@@ -1,2 +1,0 @@
-*.usdz filter=lfs diff=lfs merge=lfs -text
-Packages/RealityKitContent/Sources/RealityKitContent/RealityKitContent.rkassets/ORScene.usdz filter=lfs diff=lfs merge=lfs -text
