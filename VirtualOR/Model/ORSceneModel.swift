@@ -23,8 +23,8 @@ enum Suction: String {
 }
 
 enum Drawer: String {
-    case drawer1 = "drawer_001"
-    case drawer2 = "drawer_002"
+    case drawer1 = "drawer_1"
+    case drawer2 = "drawer_2"
     case drawer3 = "drawer_003"
     case drawer4 = "drawer_004"
     case drawer5 = "drawer_005"
@@ -132,4 +132,15 @@ enum CollidableEntities {
         }
         return map
     }()
+}
+
+/// 抽屉 → 药品的映射。打开对应抽屉即"拿起"该药品（HUD holdingItem 切换）。
+/// 没有 3D 药品模型，所以拿药只更新 hold 文字 + 还原原本手持的器械（如果有）。
+enum DrugMap {
+    static let drawerToDisplayName: [String: String] = [
+        Drawer.drawer2.rawValue: "Propofol 丙泊酚",
+        Drawer.drawer3.rawValue: "Salbutamol 沙丁胺醇",
+        Drawer.drawer4.rawValue: "Flumazenil/Naloxone 氟马西尼/纳洛酮",
+        Drawer.drawer5.rawValue: "Muscle Relaxant 肌松药",
+    ]
 }

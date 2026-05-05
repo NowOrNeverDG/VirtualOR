@@ -7,7 +7,9 @@
       "Bash(git log *)",
       "Bash(xargs git *)",
       "Bash(git rm *)",
-      "Read(//Users/geding/Downloads/VRScene/**)"
+      "Read(//Users/geding/Downloads/VRScene/**)",
+      "Bash(xcodebuild -project /Users/geding/Documents/VirtualOR/VirtualOR.xcodeproj -scheme VirtualOR -destination 'platform=visionOS Simulator,name=Apple Vision Pro' build)",
+      "Bash(xcodebuild -project /Users/geding/Documents/VirtualOR/VirtualOR.xcodeproj -scheme VirtualOR -destination 'platform=visionOS Simulator,id=FB652FE1-8226-4191-94BA-B378EE01059C' build)"
     ]
   }
 }

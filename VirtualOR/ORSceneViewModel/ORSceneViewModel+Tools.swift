@@ -27,7 +27,7 @@ extension ORSceneViewModel {
             return
         }
         print("========== All Entities in Room ==========")
-        printEntityHierarchy(rootEntity, indent: "")
+        //printEntityHierarchy(rootEntity, indent: "")
         print("========== End of Entities ==========")
     }
     

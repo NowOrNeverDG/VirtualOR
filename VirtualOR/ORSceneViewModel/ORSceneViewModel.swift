@@ -42,16 +42,23 @@ class ORSceneViewModel {
     /// 剧情数据，由 loadScenarioIfNeeded() 从 ScenarioService 拉取后赋值
     private(set) var scenario: Scenario?
 
+    /// 状态机运行时（由 ImmersiveView 注入）。临床操作通过 handleTapGesture 路由到这里。
+    @ObservationIgnored
+    weak var runtime: ScenarioRuntime?
+
     /// 幂等加载剧情数据（mock）。加载完会用 initialState.monitor 覆盖 6 个 vital。
-    func loadScenarioIfNeeded() async {
-        guard scenario == nil else { return }
+    @discardableResult
+    func loadScenarioIfNeeded() async -> Scenario? {
+        if let scenario { return scenario }
         do {
             let s = try await ScenarioService.fetchMockScenario()
             self.scenario = s
             applyMonitor(s.initialState.monitor)
             logger.info("Loaded scenario: \(s.title)")
+            return s
         } catch {
             logger.error("Failed to load scenario: \(error.localizedDescription)")
+            return nil
         }
     }
 
@@ -102,20 +109,43 @@ class ORSceneViewModel {
 
     func handleTapGesture(entity: Entity) {
         let name = entity.name
-        logger.debug("Tapped entity: \(name)")
-        
+        let chain = ancestorChain(of: entity)
+        logger.info("[Tap] hit=\"\(name)\" chain=\(chain)")
+
         switch name {
-        case "drawer_1", "drawer_2", "drawer_3", "drawer_4", "drawer_5":
-            toggleDrawer(entity)
         case "bent_pipe":
+            logger.info("[Tap] → expandPipes")
             expandPipes()
         case "pipe_1", "pipe_2", "pipe_connection":
+            logger.info("[Tap] → collapsePipes")
             collapsePipes()
         default:
-            if CollidableEntities.pickableInstruments.contains(name) {
+            if CollidableEntities.drawer.contains(name) {
+                logger.info("[Tap] → toggleDrawer (matched in CollidableEntities.drawer)")
+                toggleDrawer(entity)
+            } else if let opId = OperationEntityMap.entityToOperationId[name] {
+                logger.info("[Tap] → runtime.perform(\(opId))")
+                runtime?.perform(operationId: opId)
+            } else if CollidableEntities.pickableInstruments.contains(name) {
+                logger.info("[Tap] → pickUpInstrument")
                 pickUpInstrument(entity)
+            } else {
+                logger.warning("[Tap] no handler matched for \"\(name)\". CollidableEntities.drawer=\(CollidableEntities.drawer)")
             }
         }
+    }
+
+    /// 返回从被点实体往上的 ancestor 链（最多 5 层），方便排查命中的是不是子实体
+    private func ancestorChain(of entity: Entity) -> String {
+        var names: [String] = [entity.name.isEmpty ? "<unnamed>" : entity.name]
+        var current: Entity? = entity.parent
+        var depth = 0
+        while let e = current, depth < 5 {
+            names.append(e.name.isEmpty ? "<unnamed>" : e.name)
+            current = e.parent
+            depth += 1
+        }
+        return names.joined(separator: " ← ")
     }
     
     
@@ -171,6 +201,18 @@ class ORSceneViewModel {
         logger.debug("Picked up instrument: \(self.holdingItem)")
     }
 
+    /// 拿起药品：药品没有 3D 模型，仅切换 holdingItem，并把原本手持的器械组还原显示。
+    private func pickUpDrug(displayName: String) {
+        if holdingItem == displayName { return }
+
+        if let previous = currentHeldGroup {
+            showEntities(previous.entityNames)
+        }
+        currentHeldGroup = nil
+        holdingItem = displayName
+        logger.info("[Hold] picked up drug: \(displayName)")
+    }
+
     //MARK: Drawer Logic
     private func toggleDrawer(_ entity: Entity) {
         let entityName = entity.name
@@ -189,14 +231,17 @@ class ORSceneViewModel {
         let entityName = entity.name
         moveEntity(entity, axis: .z, delta: -drawerOpenDistance)
         drawerStates[entityName] = true
-        logger.debug("[\(entityName)] Drawer opened")
+        if let drugName = DrugMap.drawerToDisplayName[entityName] {
+            pickUpDrug(displayName: drugName)
+        }
+        logger.info("[Drawer] opened \(entityName)")
     }
-    
+
     private func closeDrawer(_ entity: Entity) {
         let entityName = entity.name
         moveEntity(entity, axis: .z, delta: drawerOpenDistance)
         drawerStates[entityName] = false
-        logger.debug("[\(entityName)] Drawer closed")
+        logger.info("[Drawer] closed \(entityName)")
     }
     
 

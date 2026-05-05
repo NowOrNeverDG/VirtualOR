@@ -12,6 +12,7 @@ import RealityKitContent
 struct ImmersiveView: View {
     @Environment(AppModel.self) var appModel
     @State private var viewModel = ORSceneViewModel()
+    @State private var runtime = ScenarioRuntime()
     @State private var headTrackingManager = HeadTrackingManager()
     @State private var hudEntity = Entity()
 
@@ -24,8 +25,11 @@ struct ImmersiveView: View {
             content.add(rootEntity)
             viewModel.prepareForRoom()
 
-            // Load scenario mock data (populates HUD vitals from initialState.monitor)
-            await viewModel.loadScenarioIfNeeded()
+            // Load scenario and start the state machine
+            if let scenario = await viewModel.loadScenarioIfNeeded() {
+                viewModel.runtime = runtime
+                runtime.start(scene: viewModel, scenario: scenario)
+            }
 
             // Add HUD entity (will track head position)
             content.add(hudEntity)
@@ -44,6 +48,7 @@ struct ImmersiveView: View {
         } attachments: {
             Attachment(id: "hudText") {
                 VStack(alignment: .leading, spacing: 4) {
+                    Text("State: \(runtime.currentStateName)")
                     Text("Hold: \(viewModel.holdingItem)")
                     Text("NIBP: \(viewModel.nibpSystolic)/\(viewModel.nibpDiastolic) mmHg")
                     Text("SPO2: \(viewModel.spo2)%")
@@ -63,6 +68,15 @@ struct ImmersiveView: View {
             viewModel.printWorldPosition(of: value.entity)
             viewModel.handleTapGesture(entity: value.entity)
         })
+        .alert(
+            runtime.activePopup?.type == "error" ? "错误" : "提示",
+            isPresented: Binding(
+                get: { runtime.activePopup != nil },
+                set: { if !$0 { runtime.dismissPopup() } }
+            ),
+            actions: { Button("确定") { } },
+            message: { Text(runtime.activePopup?.message ?? "") }
+        )
         .task {
             await headTrackingManager.start()
 
