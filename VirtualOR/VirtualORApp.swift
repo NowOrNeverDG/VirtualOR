@@ -14,7 +14,7 @@ struct VirtualORApp: App {
     @State private var avPlayerViewModel = AVPlayerViewModel()
     
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             if avPlayerViewModel.isPlaying {
                 AVPlayerView(viewModel: avPlayerViewModel)
             } else {
