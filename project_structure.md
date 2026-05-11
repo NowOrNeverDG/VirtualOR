@@ -1,8 +1,8 @@
 # VirtualOR 项目结构文档
 
-> 最后同步：2026-05-02
-> 基于 commit：`62ae37e I can pick up instrument and display text about what I hold`
-> 该文档反映当前代码库的实际状态，包含 `isPipesExpanded` 状态机还原后的最新逻辑。
+> 最后同步：2026-05-06
+> 基于 commit：`2b6d6a1 add breathing emergency audio + video overlay`
+> 该文档反映当前代码库的实际状态，含 ScenarioRuntime 状态机、AudioService 多轨循环、BreathingVideoPlayer 浮窗化以及 ContentView ↔ ImmersiveView 的视频跨场景共享。
 
 ---
 
@@ -39,7 +39,14 @@
 
 ```
 VirtualOR/
-├── VirtualOR.xcodeproj/                       # Xcode 工程
+├── VirtualOR.xcodeproj/                       # Xcode 工程（synchronized groups）
+├── CLAUDE.md                                  # 工程规则 + 关键文件速查 + Phase 进度
+├── project_structure.md                       # 本文档
+├── .claude/
+│   ├── settings.local.json                    # 本地权限（不提交）
+│   └── commands/
+│       ├── build.md                           # /build slash 命令
+│       └── sync-structure.md                  # /sync-structure slash 命令
 ├── Packages/
 │   └── RealityKitContent/                     # 3D 资源 SwiftPM 包
 │       ├── Package.swift
@@ -47,23 +54,29 @@ VirtualOR/
 │           ├── RealityKitContent.swift        # Bundle.module 访问入口
 │           └── RealityKitContent.rkassets/    # Reality Composer Pro 场景资源
 │               ├── Immersive.usda
-│               ├── ORScene.usdz               # 主手术室场景（Git LFS）
+│               ├── ORScene.usdz               # 主手术室场景
 │               ├── SkyDome.usdz
 │               └── Ground/
 │
 └── VirtualOR/                                 # 主应用源码
     ├── Info.plist                             # NSWorldSensingUsageDescription 等
-    ├── VirtualORApp.swift                     # @main 入口
-    ├── AppModel.swift                         # 全局状态
-    ├── ContentView.swift                      # 主菜单
-    ├── ImmersiveView.swift                    # 沉浸式 3D 视图 + HUD
+    ├── VirtualORApp.swift                     # @main 入口（WindowGroup id="main"）
+    ├── AppModel.swift                         # 全局状态（含视频生命周期）
+    ├── ContentView.swift                      # 主菜单 + 2D 窗口视频
+    ├── ImmersiveView.swift                    # 沉浸式 3D 视图 + HUD + 浮窗视频
     ├── ToggleImmersiveSpaceButton.swift       # 沉浸空间开关
     ├── HeadTrackingManager.swift              # 头部位姿跟踪
-    ├── AVPlayerView.swift                     # 视频播放视图（UIVCRepresentable）
-    ├── AVPlayerViewModel.swift                # 视频播放逻辑
+    ├── AudioService.swift                     # 多轨循环音 + 总开关
+    ├── BreathingVideoPlayer.swift             # AVPlayerLooper 无缝循环视频
+    ├── AVPlayerView.swift                     # （遗留 stub，未启用）
+    ├── AVPlayerViewModel.swift                # （遗留 stub，未启用）
     │
-    ├── ORSceneModel/
-    │   └── ORSceneModel.swift                 # 实体枚举 + 器械分组定义
+    ├── Model/
+    │   ├── ORSceneModel.swift                 # 实体枚举 + 器械分组 + DrugMap
+    │   ├── ScenarioModel.swift                # 后端 JSON Codable struct
+    │   ├── ScenarioRuntime.swift              # 状态机：state 切换 / op 执行 / popup / log
+    │   ├── Monitor+Apply.swift                # MonitorChange 应用（absolute / delta）
+    │   └── OperationEntityMap.swift           # 3D 实体名 → operationId（占位）
     │
     ├── ORSceneViewModel/
     │   ├── ORSceneViewModel.swift             # 场景交互核心
@@ -73,7 +86,15 @@ VirtualOR/
     │   ├── APIConfig.swift
     │   ├── APIEndpoint.swift
     │   ├── APIService.swift
-    │   └── APIError.swift
+    │   ├── APIError.swift
+    │   └── ScenarioService.swift              # mock 剧情 JSON + 真实 API 占位
+    │
+    ├── Resources/
+    │   ├── Audio/
+    │   │   ├── abnormal_breath.m4a            # 呼吸困难循环音
+    │   │   └── background_music.m4a           # 背景音乐循环
+    │   └── Video/
+    │       └── abnormal_breath.mp4            # 呼吸困难视频（10s 后浮窗）
     │
     └── Assets.xcassets/                       # AppIcon / AccentColor
 ```
@@ -86,44 +107,48 @@ VirtualOR/
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                          VirtualORApp (@main)                     │
-├──────────────────────────────┬───────────────────────────────────┤
-│         WindowGroup           │         ImmersiveSpace             │
-│  ┌──────────────────────┐     │  ┌─────────────────────────────┐  │
-│  │ avPlayerVM.isPlaying │     │  │       ImmersiveView         │  │
-│  │   ? AVPlayerView     │     │  │  ┌────────┐  ┌──────────┐   │  │
-│  │   : ContentView      │     │  │  │RealityV│  │SwiftUI   │   │  │
-│  │                      │     │  │  │ + 3D   │  │HUD attach│   │  │
-│  └──────────┬───────────┘     │  │  └───┬────┘  └────┬─────┘   │  │
-│             │ environment     │  └──────┼────────────┼─────────┘  │
-│  ┌──────────┴───────────┐     │         │            │            │
-│  │      AppModel        │◄────┼─────────┘            │            │
-│  │ immersiveSpaceState  │     │                      │            │
-│  │ loadingState         │     │  ┌───────────────────┴─────────┐  │
-│  └──────────────────────┘     │  │     ORSceneViewModel        │  │
-│                                │  │ rootEntity / drawerStates   │  │
-│  ┌──────────────────────┐     │  │ isPipesExpanded             │  │
-│  │ AVPlayerViewModel    │     │  │ holdingItem / heldGroup     │  │
-│  └──────────────────────┘     │  └───────┬─────────────────────┘  │
-│                                │          │                       │
-│                                │  ┌───────┴────────┐              │
-│                                │  │HeadTrackingMgr │              │
-│                                │  │ ARKitSession + │              │
-│                                │  │ WorldTracking  │              │
-│                                │  └────────────────┘              │
-├──────────────────────────────┴───────────────────────────────────┤
-│                          Networking Layer                         │
-│            APIConfig → APIEndpoint → APIService → APIError        │
+│                       VirtualORApp (@main)                        │
+├─────────────────────────────┬────────────────────────────────────┤
+│   WindowGroup(id:"main")    │       ImmersiveSpace                │
+│  ┌──────────────────────┐   │  ┌──────────────────────────────┐  │
+│  │      ContentView     │   │  │        ImmersiveView         │  │
+│  │  - VideoPlayer 0-10s │   │  │  RealityView + Attachments   │  │
+│  │  - ToggleImmSpcBtn   │   │  │  - hudText (vitals + state)  │  │
+│  └──────────┬───────────┘   │  │  - breathingVideo (10s 后)   │  │
+│             │ environment   │  └──────┬───────────────────────┘  │
+│  ┌──────────┴───────────┐   │         │ env (AppModel)            │
+│  │      AppModel        │◄──┼─────────┘                           │
+│  │ immersiveSpaceState  │   │  ┌──────────────────────────────┐  │
+│  │ videoPlayer          │───┼──┤  ORSceneViewModel            │  │
+│  │ isVideoFloated       │   │  │  rootEntity / drawerStates   │  │
+│  │ loadingState         │   │  │  isPipesExpanded             │  │
+│  └──────────────────────┘   │  │  holdingItem / heldGroup     │  │
+│                              │  │  scenario / weak runtime     │  │
+│                              │  └──┬───────────────────────────┘  │
+│                              │     │                              │
+│                              │  ┌──┴────────────┐                 │
+│                              │  │ScenarioRuntime│                 │
+│                              │  │ stateId / log │                 │
+│                              │  │ branch / popup│                 │
+│                              │  └───────────────┘                 │
+│                              │  ┌────────────┐ ┌────────────────┐│
+│                              │  │AudioService│ │HeadTrackingMgr ││
+│                              │  │ multi loop │ │ARKit + WorldTrk││
+│                              │  └────────────┘ └────────────────┘│
+├─────────────────────────────┴────────────────────────────────────┤
+│                       Networking Layer                            │
+│  APIService → ScenarioService.fetchMockScenario() → Scenario     │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 ### 3.2 设计模式
 
-- **MVVM**：`AppModel` 管理全局状态；`ORSceneViewModel` / `AVPlayerViewModel` / `HeadTrackingManager` 各管理子领域；视图层（`ContentView` / `ImmersiveView` / `AVPlayerView`）保持薄。
-- **`@Observable` + `@MainActor`**：所有 ViewModel 使用 Swift 5.9 的 `@Observable` 宏，并在 `@MainActor` 上运行，避免 UI 线程问题。
-- **Environment 注入**：`AppModel` 通过 `.environment(appModel)` 注入到 SwiftUI 视图层级。
-- **单例**：`APIService.shared`。
-- **Swift Package 化资源**：3D 资源独立成 `RealityKitContent` 包，主工程通过 `realityKitContentBundle` 访问。
+- **MVVM**：`AppModel` 管全局；`ORSceneViewModel` 管 3D 场景与 HUD vitals；`ScenarioRuntime` 管临床状态机；视图层（`ContentView` / `ImmersiveView`）保持薄。
+- **`@Observable` + `@MainActor`**：所有 ViewModel / Service 用 `@Observable` 宏，跑在 `@MainActor`。
+- **Environment 注入**：`AppModel` 通过 `.environment(appModel)` 注入；视图通过 `@Environment(AppModel.self)` 取。
+- **Service 类**：`AudioService` / `BreathingVideoPlayer` / `ScenarioRuntime` 各管一个独立领域，通过 `@State` 持有或挂在 `AppModel` 上共享。
+- **Weak 注入**：`ORSceneViewModel.runtime` 是 `weak var`（避免环），由 `ImmersiveView` 在 start 时回填。
+- **Swift Package 化资源**：3D 资源独立成 `RealityKitContent` 包；音视频资源放主 bundle 的 `Resources/Audio/`、`Resources/Video/`。
 - **Sendable 安全**：`APIService` 标记 `final … Sendable`，泛型 `request<T: Decodable & Sendable>`。
 
 ---
@@ -134,63 +159,80 @@ VirtualOR/
 
 定义两个 Scene：
 
-1. **`WindowGroup`**：根据 `avPlayerViewModel.isPlaying` 切换 `AVPlayerView` 或 `ContentView`。
+1. **`WindowGroup(id: "main")`**：渲染 `ContentView`（含 environment(appModel)）。`id` 是 `dismissWindow` / `openWindow` 操作所需。`isPlaying ? AVPlayerView : ContentView` 这条遗留分支因 `videoURL == nil` 永远走 ContentView。
 2. **`ImmersiveSpace`**（id `"ImmersiveSpace"`，`.full` 沉浸式）：
-   - `onAppear`：将 `appModel.immersiveSpaceState` 置 `.open`，并调用 `avPlayerViewModel.play()`。
-   - `onDisappear`：置 `.closed`，调用 `reset()`。
+   - `onAppear`：将 `appModel.immersiveSpaceState` 置 `.open`。
+   - `onDisappear`：置 `.closed`。
 
 ### 4.2 [AppModel.swift](VirtualOR/AppModel.swift) — 全局状态
 
-| 属性 | 类型 | 取值 | 说明 |
-|------|------|------|------|
-| `immersiveSpaceID` | `String` | `"ImmersiveSpace"` | 沉浸空间标识 |
-| `immersiveSpaceState` | `ImmersiveSpaceState` | `.closed` / `.inTransition` / `.open` | 沉浸空间生命周期 |
-| `loadingState` | `LoadingState` | `.idle` / `.loading` / `.loaded` / `.failed(Error)` | 启动数据加载状态 |
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `immersiveSpaceID` | `String` | `"ImmersiveSpace"` |
+| `immersiveSpaceState` | `ImmersiveSpaceState` | `.closed` / `.inTransition` / `.open` |
+| `loadingState` | `LoadingState` | `.idle` / `.loading` / `.loaded` / `.failed(Error)` |
+| `videoPlayer` | `BreathingVideoPlayer` | 共享视频播放器实例 |
+| `isVideoFloated` | `Bool` | `false`：视频在 ContentView 2D 窗口；`true`：在 ImmersiveView 右下角浮窗 |
 
-`fetchInitialData()` 是异步占位实现 — 注释中预留了真实端点调用 `APIService.shared.request(APIEndpoint(path: "/config"))`，目前直接置为 `.loaded`。
+**视频生命周期方法**：
 
-### 4.3 [ContentView.swift](VirtualOR/ContentView.swift) — 主菜单
+| 方法 | 行为 |
+|------|------|
+| `startVideoOverlay()` | 启动 `videoPlayer.start("abnormal_breath")`；spawn 一个 10s 倒计时 Task，倒计时结束置 `isVideoFloated = true` |
+| `stopVideoOverlay()` | 取消计时器 + 停 player + `isVideoFloated = false` |
 
-按 `loadingState` 分支渲染：
+`fetchInitialData()` 仍是占位（直接置 `.loaded`）。
 
-| 状态 | UI |
-|------|-----|
-| `.idle` / `.loading` | `ProgressView("Loading...")` |
-| `.loaded` | 中文操作说明（"模拟手术室环境……请根据患者出现的情况进行相应的处理"）+ `ToggleImmersiveSpaceButton` |
-| `.failed` | "Failed to load data" + Retry 按钮（重新调用 `fetchInitialData()`） |
+### 4.3 [ContentView.swift](VirtualOR/ContentView.swift) — 主菜单 + 2D 窗口视频
 
-`.task { await appModel.fetchInitialData() }` 确保进入主菜单即触发加载。
+按 `loadingState` 分支渲染。`.loaded` 时的 VStack 增加了视频与按钮的条件渲染：
+
+| 条件 | 显示 |
+|------|------|
+| `immersiveSpaceState == .open && !isVideoFloated` | 480×320 的 `VideoPlayer(player: appModel.videoPlayer.player)` |
+| `immersiveSpaceState != .open` | `ToggleImmersiveSpaceButton`（沉浸开了之后就藏起来） |
+
+`.task { await appModel.fetchInitialData() }` 不变。
 
 ### 4.4 [ImmersiveView.swift](VirtualOR/ImmersiveView.swift) — 沉浸式视图
 
-使用 `RealityView` + `attachments` 同时承载 3D 实体和 SwiftUI HUD。
+`RealityView` + `attachments`，承载 3D 场景、HUD 文字、右下角浮窗视频，以及 popup alert。
 
-**初始化（`make` 闭包）：**
-1. `await viewModel.loadRoomIfNeeded()` 异步加载 `ORScene`。
-2. `viewModel.prepareForRoom()`：生成碰撞体、初始化管道状态、(DEBUG) 打印实体树。
-3. 添加独立的 `hudEntity` 用于跟随头部。
-4. 取出 SwiftUI Attachment（id `"hudText"`），定位在头部坐标系下 `(-0.35, -0.22, -0.5)` —— 视野左下方约 50cm 处。
+**注入的 env / state**：
 
-**Attachment 内容：**
+| 名称 | 类型 | 用途 |
+|------|------|------|
+| `appModel` | `AppModel` (env) | 访问共享 `videoPlayer` / `isVideoFloated` |
+| `dismissWindow` / `openWindow` | env values | 浮窗化时关 main window；退场时重开 |
+| `viewModel` | `ORSceneViewModel` (state) | 3D 场景与 HUD vitals |
+| `runtime` | `ScenarioRuntime` (state) | 临床状态机 |
+| `audioService` | `AudioService` (state) | 双轨循环音 |
+| `hudEntity` / `videoEntity` | `Entity` (state) | 跟随头部的 HUD 容器 |
 
-```swift
-Text("Hold: \(viewModel.holdingItem)")
-    .padding(...).background(.black.opacity(0.6))
-    .cornerRadius(8)
-```
+**初始化（`make` 闭包）**：
+1. 加载场景、加载 scenario，回填 `viewModel.runtime = runtime` 并 `runtime.start(...)`。
+2. `hudEntity` 加入 content；`hudText` attachment 定位 `(-0.40, -0.22, -0.5)`（左下）。
+3. `videoEntity` 挂为 `hudEntity` 子节点，定位 `(0.42, -0.18, -0.5)`（右下）；`breathingVideo` attachment 仅在 `appModel.isVideoFloated == true` 时渲染 `VideoPlayer`。
 
-**手势绑定：**
+**两个 Attachment**：
 
-```swift
-.gesture(TapGesture().targetedToAnyEntity().onEnded { value in
-    viewModel.printWorldPosition(of: value.entity)
-    viewModel.handleTapGesture(entity: value.entity)
-})
-```
+| id | 内容 | 大小 |
+|---|---|---|
+| `hudText` | State / Hold / NIBP / SPO2 / HR / RR / 体温 七行文字 | 自适应 |
+| `breathingVideo` | `VideoPlayer(player: appModel.videoPlayer.player)`（条件渲染） | 220×145 |
 
-**HUD 跟随头部：**
+**手势 / Alert**：
 
-进入 `.task` 后启动 `HeadTrackingManager`，并以 ~60 FPS（`sleep 16ms`）轮询 `queryDeviceAnchor()`，将矩阵直接赋给 `hudEntity.transform`。该循环靠 `Task.isCancelled` 终止。
+- `.gesture(TapGesture().targetedToAnyEntity()...)` → `viewModel.handleTapGesture(...)`。
+- `.alert(...)` 绑定 `runtime.activePopup` —— popup 的 type 决定标题，OK 调 `runtime.dismissPopup()`。
+
+**生命周期**：
+
+| 钩子 | 动作 |
+|------|------|
+| `.task`（主） | `audioService.startLoop("background_music", volume: 0.5)`、`audioService.startLoop("abnormal_breath")`、`appModel.startVideoOverlay()`；启动 head tracking 60FPS 循环 |
+| `.onChange(of: isVideoFloated)` | 变 true 时 `dismissWindow(id: "main")` |
+| `.onDisappear` | `audioService.stopAll()` + `appModel.stopVideoOverlay()` + `openWindow(id: "main")`（避免 app 退） |
 
 ### 4.5 [HeadTrackingManager.swift](VirtualOR/HeadTrackingManager.swift) — 头部跟踪
 
@@ -204,9 +246,11 @@ Text("Hold: \(viewModel.holdingItem)")
 
 需要 `Info.plist` 中的 `NSWorldSensingUsageDescription` 授权（已配置）。
 
-### 4.6 [ORSceneModel.swift](VirtualOR/ORSceneModel/ORSceneModel.swift) — 领域模型
+### 4.6 [Model/ORSceneModel.swift](VirtualOR/Model/ORSceneModel.swift) — 领域模型
 
 将 Reality Composer Pro 中实体名抽象成 Swift 枚举，便于类型安全地引用。
+
+> 文件位置已从 `VirtualOR/ORSceneModel/` 迁到 `VirtualOR/Model/`，与 ScenarioModel / ScenarioRuntime / Monitor+Apply / OperationEntityMap 集中。
 
 #### 4.6.1 `enum Suction`（吸引器）
 
@@ -219,7 +263,7 @@ Text("Hold: \(viewModel.holdingItem)")
 
 #### 4.6.2 `enum Drawer`（抽屉与器械）
 
-5 个抽屉本体：`drawer_001` ~ `drawer_005`。⚠️ **注意**：`handleTapGesture` 的 switch 分支匹配的是 `drawer_1` ~ `drawer_5`（无前导零），与枚举 rawValue 不一致 —— 这是潜在的 Bug 或暗示场景中实际存在两套命名（详见 §7 待确认问题）。
+5 个抽屉本体：`drawer_001` ~ `drawer_005`。`handleTapGesture` 的 drawer 分支已改成 `CollidableEntities.drawer.contains(name)`，以枚举 rawValue 为唯一来源（曾经的字面值 mismatch bug 已修）。
 
 抽屉内器械按类别枚举（数量与 rawValue 前缀）：
 
@@ -264,6 +308,19 @@ static var anesMasked / anesUnmasked
 - `pickableInstruments: [String]` — 所有可拾取实体扁平列表（用于批量生成碰撞体）。
 - `entityToGroup: [String: InstrumentGroup]` — 反向映射，O(1) 查找点击实体所属组。
 
+#### 4.6.5 `enum DrugMap`（抽屉 → 药品）
+
+打开对应抽屉即"拿起"该药品（HUD `holdingItem` 切换），药品没有 3D 模型：
+
+| Drawer | 药品 |
+|---|---|
+| `drawer_002` | Propofol 丙泊酚 |
+| `drawer_003` | Salbutamol 沙丁胺醇 |
+| `drawer_004` | Flumazenil/Naloxone 氟马西尼/纳洛酮 |
+| `drawer_005` | Muscle Relaxant 肌松药 |
+
+`drawer_001` 不映射任何药品，仅做 3D 抽屉滑动。
+
 ### 4.7 [ORSceneViewModel.swift](VirtualOR/ORSceneViewModel/ORSceneViewModel.swift) — 场景交互核心
 
 #### 状态属性
@@ -274,21 +331,27 @@ static var anesMasked / anesUnmasked
 | `loadError` | `Error?` | 加载失败原因 |
 | `drawerStates` | `[String: Bool]` | 每个抽屉的开/闭状态 |
 | `drawerOpenDistance` | `Float = 1` | 抽屉沿 Z 轴位移 |
-| `isPipesExpanded` | `Bool` | 当前管道是否处于展开态（守卫 + 状态记录） |
-| `holdingItem` | `String = "nothing"` | 当前手持器械的 displayName（HUD 绑定） |
-| `currentHeldGroup` | `InstrumentGroup?` | 当前正被"持有"（隐藏中）的器械组 |
+| `isPipesExpanded` | `Bool` | 当前管道是否处于展开态 |
+| `holdingItem` | `String = "nothing"` | 当前手持的显示名（HUD 绑定，可能是器械或药品） |
+| `currentHeldGroup` | `InstrumentGroup?` | 当前正被"持有"（隐藏中）的器械组；持药品时为 nil |
+| `nibpSystolic / nibpDiastolic / spo2 / hr / rr / temperature` | Int / Double | 6 个生命体征（HUD 绑定） |
+| `scenario` | `Scenario?` | 加载到的剧情数据 |
+| `runtime` | `weak ScenarioRuntime?` | 状态机引用（`@ObservationIgnored`，由 ImmersiveView 回填） |
 
 #### 关键方法
 
 | 方法 | 行为 |
 |------|------|
-| `loadRoomIfNeeded()` | 幂等异步加载 `ORScene`（来自 `realityKitContentBundle`），调用 `generateCollisionShapes(recursive: true)` |
-| `prepareForRoom()` | 调用 `generateAllCollisionShapes()` + `initiatePipeStatus()`，DEBUG 下 `printAllEntities()` |
-| `handleTapGesture(entity:)` | 按实体名分发：抽屉 → toggle；`bent_pipe` → expand；`pipe_1/2/connection` → collapse；命中 `pickableInstruments` → `pickUpInstrument` |
-| `pickUpInstrument(_:)` | 通过 `entityToGroup` 找到组；若已持有不同组则**显示**旧组实体、**隐藏**新组实体；更新 `holdingItem` |
-| `toggleDrawer / openDrawer / closeDrawer` | 沿 Z 轴位移（`±drawerOpenDistance`），并记录状态 |
-| `expandPipes / collapsePipes` | `isPipesExpanded` 守卫 + 切换两组实体的 `entity.isEnabled` + 写入新状态 + `[Pipes] Expanded/Collapsed` 日志 |
-| `getWorldPosition(of:)` | 转发 `entity.position(relativeTo: nil)` |
+| `loadRoomIfNeeded()` | 幂等异步加载 `ORScene`（来自 `realityKitContentBundle`） |
+| `loadScenarioIfNeeded() async -> Scenario?` | 幂等加载 mock scenario，把 `initialState.monitor` 应用到 HUD vital；返回剧情对象给调用方 |
+| `applyMonitor(_ monitor: Monitor)` | Monitor → 6 个 vital 属性的唯一入口；状态机 + 抽屉效果都走这里 |
+| `prepareForRoom()` | 生成碰撞体 + 初始化管道状态，DEBUG 下打印实体树 |
+| `handleTapGesture(entity:)` | 实体名分发：`bent_pipe` → expand；`pipe_*` → collapse；`CollidableEntities.drawer` → toggleDrawer；`OperationEntityMap` 命中 → `runtime?.perform(opId)`；`pickableInstruments` → `pickUpInstrument`；其它 → warning |
+| `pickUpInstrument(_:)` | 通过 `entityToGroup` 找组；显示旧组、隐藏新组、更新 holdingItem |
+| `pickUpDrug(displayName:)` | 显示旧器械组（如有）→ `currentHeldGroup = nil` → `holdingItem = displayName` |
+| `toggleDrawer / openDrawer / closeDrawer` | 沿 Z 轴位移；`openDrawer` 命中 `DrugMap.drawerToDisplayName` 时调 `pickUpDrug` |
+| `expandPipes / collapsePipes` | `isPipesExpanded` 守卫 + 切换实体可见性 |
+| `ancestorChain(of:)` | 返回实体的祖先链字符串（最多 5 层），调试 [Tap] 命中用 |
 
 #### 工具方法（`extension`，`private`）
 
@@ -311,12 +374,84 @@ static var anesMasked / anesUnmasked
 - 关闭时**不**在按钮逻辑里设置 `.closed`，而是统一交给 `ImmersiveView.onDisappear`，避免多路径下状态不一致（代码注释明确说明此约定）。
 - `openImmersiveSpace` 失败时（`.userCancelled` / `.error`）回滚为 `.closed`。
 
-### 4.10 [AVPlayerView.swift](VirtualOR/AVPlayerView.swift) + [AVPlayerViewModel.swift](VirtualOR/AVPlayerViewModel.swift)
+### 4.10 [AVPlayerView.swift](VirtualOR/AVPlayerView.swift) + [AVPlayerViewModel.swift](VirtualOR/AVPlayerViewModel.swift) — 遗留 stub
 
-- `AVPlayerView`：薄壳 `UIViewControllerRepresentable`。
-- `AVPlayerViewModel`：
-  - `videoURL` 当前**硬编码为 `nil`**（注释提示 `Bundle.main.url(forResource: "MyVideo", withExtension: "mp4")`），意味着 `play()` 实际会立即返回 —— 视频教学功能尚未启用。
-  - 实现 `AVPlayerViewControllerDelegate.willEndFullScreenPresentationWithAnimationCoordinator`，全屏退出时 `reset()`。
+- `videoURL` 硬编码为 `nil`，所以 `play()` 立刻 return；从未渲染过视频。
+- WindowGroup 里 `isPlaying ? AVPlayerView : ContentView` 这条分支因此永远走 ContentView。
+- 现役视频功能改用 `BreathingVideoPlayer` + SwiftUI `VideoPlayer`，这两个文件保留只是没人删。
+
+### 4.11 [AudioService.swift](VirtualOR/AudioService.swift) — 多轨循环音
+
+`@MainActor @Observable`，包装 `AVAudioPlayer`，支持多个命名轨道并发循环。
+
+| 公开 API | 说明 |
+|---|---|
+| `var isSoundEnabled: Bool` | 总开关，set 时 didSet 自动 pause/resume 所有已注册的循环 |
+| `var registeredLoops: [String]` | 已注册的轨道名（调试用） |
+| `func toggleSound()` | `isSoundEnabled.toggle()` 便捷入口 |
+| `func startLoop(named:fileExtension:volume:)` | 幂等注册并按当前 isSoundEnabled 启动；找不到文件打 warning 不抛 |
+| `func stop(named:)` | 停并卸载单个 |
+| `func stopAll()` | 退场时全停 |
+
+ImmersiveView `.task` 启两条：`background_music`（volume 0.5）+ `abnormal_breath`（默认 1.0）。
+
+### 4.12 [BreathingVideoPlayer.swift](VirtualOR/BreathingVideoPlayer.swift) — 无缝循环视频
+
+`@MainActor @Observable`，用 `AVQueuePlayer + AVPlayerLooper` 做真正无 gap 循环。
+
+| 公开 API | 说明 |
+|---|---|
+| `let player: AVQueuePlayer` | 暴露给 SwiftUI `VideoPlayer(player:)` 用 |
+| `var isReady: Bool` | 是否已 prepare |
+| `func start(named:fileExtension:)` | 默认 `.mp4`；幂等；默认 `isMuted = true`（避开和 audio loop 重复发声）|
+| `func stop()` | 暂停 + 卸载 |
+
+实例由 `AppModel` 持有，ContentView 与 ImmersiveView 共享渲染。
+
+### 4.13 [Model/ScenarioModel.swift](VirtualOR/Model/ScenarioModel.swift) — 后端 JSON Codable
+
+与后端 JSON 一一对应的纯数据 struct：
+
+| 类型 | 角色 |
+|---|---|
+| `Scenario` | 顶层（version / title / totalDuration / initialState / states / endState） |
+| `InitialState` | 初始 10s 状态 |
+| `ScenarioState` | state1/2/3/4 等节点（含 autoVideo / monitor / onNoOperation / operations / targetState）|
+| `StateMonitor` | enum：`.flat(Monitor)` / `.degradable(initial, degradeTo, degradeDuration)` |
+| `Monitor` / `NIBP` | 6 个生命体征基础值 |
+| `ScenarioOperation` | 操作（含 effect / popup / log / targetState / branchOperations）|
+| `OperationEffect` / `MonitorChange` / `NIBPChange` | 效果应用 |
+| `ValueChange` | enum：`.absolute(Double)` / `.delta("+10")` —— 自定义 init(from:) 支持双形态 |
+| `Popup` | type ("success"/"error") + message |
+| `EndState` | 课程结束 |
+
+### 4.14 [Model/ScenarioRuntime.swift](VirtualOR/Model/ScenarioRuntime.swift) — 状态机
+
+`@MainActor @Observable`。Phase 1 已交付：
+
+| 公开 API / 状态 | 说明 |
+|---|---|
+| `currentStateId / currentStateName` | 当前状态 |
+| `activePopup: Popup?` | 弹窗，绑定 SwiftUI .alert |
+| `pendingBranchParent: String?` | 处于 branch 选择阶段时的父 op id |
+| `log: [OperationLogEntry]` | 操作日志（opId / timestamp / stateId）|
+| `isCourseEnded: Bool` | 进入 endState 后置 true，拒绝后续 perform |
+| `func start(scene:scenario:)` | 入口；进 first state |
+| `func perform(operationId:)` | 总分发；branch 守门 + popup 阻塞 + 日志 |
+| `func dismissPopup()` | popup 关闭后若有 `pendingTargetState` 再 transition |
+| 11 个 `triggerXxx()` extension | 给每个 operation 一个具名入口（jawThrust / propofolIV / muscleRelaxant 等），底层都走 `perform(operationId:)` |
+
+应用 effect 时 `currentMonitor = currentMonitor.applying(change)` → `scene?.applyMonitor(currentMonitor)`，HUD 自动刷新。
+
+### 4.15 [Model/Monitor+Apply.swift](VirtualOR/Model/Monitor+Apply.swift) — MonitorChange 应用
+
+`Monitor.applying(_ change: MonitorChange) -> Monitor`：absolute 覆盖、delta（"+10"/"-5"）叠加；nil 字段保持不变。`ValueChange.resolve(against:)` 解析双形态。Int 字段 round 取整，Double（temperature）保留小数。
+
+### 4.16 [Model/OperationEntityMap.swift](VirtualOR/Model/OperationEntityMap.swift) — 3D 实体名 → operationId
+
+`enum OperationEntityMap { static let entityToOperationId: [String: String] = [:] }`。当前为空字典占位 —— 资源里有了对应 3D 实体（药瓶 / 球囊 / 操作图标）后填入。
+
+`ORSceneViewModel.handleTapGesture` 在 default 分支查这张表，命中就 `runtime?.perform(opId)`。
 
 ---
 
@@ -364,6 +499,15 @@ timeoutInterval = 30
 
 `LocalizedError`，5 个 case：`invalidURL` / `invalidResponse` / `httpError(statusCode, data)` / `decodingError(Error)` / `networkError(Error)`。
 
+### 5.6 [ScenarioService.swift](VirtualOR/Networking/ScenarioService.swift)
+
+剧情数据服务。两个静态方法：
+
+- `fetchScenario() async throws -> Scenario` — 走 `APIService` 拉取真实数据；当前 path 是 `"/placeholder"`，待后端 API ready 后替换。
+- `fetchMockScenario() async throws -> Scenario` — 解码文件内嵌的硬编码 `scenarioJSON`（麻醉气道管理课程），开发联调期用。
+
+`ORSceneViewModel.loadScenarioIfNeeded()` 当前调用 `fetchMockScenario()`，API ready 后只需切到 `fetchScenario()`，签名一致。
+
 ---
 
 ## 6. 数据流 / 关键场景
@@ -375,21 +519,32 @@ App 启动
   ↓
 ContentView 显示 → .task { fetchInitialData() }
   ↓
-loadingState: .idle → .loading → .loaded   (当前是空操作占位，未发起真实请求)
+loadingState: .idle → .loading → .loaded   (当前是空操作占位)
   ↓
 显示中文说明 + ToggleImmersiveSpaceButton
   ↓
-用户点击 → openImmersiveSpace
+用户点 Show → openImmersiveSpace → immersiveSpaceState .closed → .inTransition → .open
   ↓
-immersiveSpaceState: .closed → .inTransition → .open
+ImmersiveView 加载（make 闭包）：
+  ├ loadRoomIfNeeded()                    异步加载 ORScene.usdz
+  ├ loadScenarioIfNeeded()                 fetchMockScenario，初始 monitor 应用到 HUD
+  │   └ runtime.start(scene:scenario:)     transition(to: state1)，HUD 切到 state1.initial
+  ├ prepareForRoom()                       generateAllCollisionShapes + initiatePipeStatus
+  ├ hudEntity 加 hudText attachment       (-0.40, -0.22, -0.5)
+  └ videoEntity (子节点) 在 (0.42, -0.18, -0.5)；breathingVideo attachment 条件渲染
   ↓
-ImmersiveView 加载：
-  ├ loadRoomIfNeeded()        异步加载 ORScene.usdz
-  ├ prepareForRoom()          generateAllCollisionShapes + initiatePipeStatus
-  ├ 添加 HUD attachment        固定头部坐标系下偏移
-  ├ HeadTrackingManager.start ARKit WorldTrackingProvider
-  └ 60 FPS HUD 跟随循环        sleep 16ms
-同时：avPlayerViewModel.play()（videoURL=nil 时空跑）
+.task：
+  ├ audioService.startLoop("background_music", volume: 0.5)
+  ├ audioService.startLoop("abnormal_breath")
+  ├ appModel.startVideoOverlay() → videoPlayer.start("abnormal_breath")
+  │                              + 10s Task → 倒计时结束置 isVideoFloated = true
+  └ HeadTrackingManager.start + 60 FPS HUD 跟随循环
+  ↓
+同时 ContentView (2D 窗口):
+  ├ 0–10s: 渲染 480×320 VideoPlayer，按钮已隐藏（state == .open）
+  └ 10s 后: VideoPlayer 条件失败不渲染；ImmersiveView .onChange → dismissWindow("main")
+  ↓
+浮窗化后 ImmersiveView 右下角 220×145 视频继续循环
 ```
 
 ### 6.2 交互流程
@@ -397,14 +552,38 @@ ImmersiveView 加载：
 ```
 TapGesture 点击 3D 实体
   ↓
-viewModel.handleTapGesture(entity:)
-  ├ drawer_1~5            → toggleDrawer  → Z 轴位移 ±1
-  ├ bent_pipe             → expandPipes   → (守卫:!isPipesExpanded) 隐藏折叠组、显示展开组、置 true
-  ├ pipe_1/2/connection   → collapsePipes → (守卫: isPipesExpanded) 隐藏展开组、显示折叠组、置 false
-  └ pickableInstruments   → pickUpInstrument
-       ├ 同组 → 忽略
-       ├ 切组 → 显示前一组、隐藏新组
-       └ 更新 holdingItem  →  HUD Text 通过 @Observable 自动刷新
+viewModel.handleTapGesture(entity:)         [Tap] log: hit + ancestor chain
+  ├ bent_pipe             → expandPipes   (守卫:!isPipesExpanded)
+  ├ pipe_1/2/connection   → collapsePipes (守卫: isPipesExpanded)
+  ├ default →
+  │   ├ CollidableEntities.drawer.contains(name)
+  │   │     → toggleDrawer (Z 轴 ±1)
+  │   │     → openDrawer 命中 DrugMap → pickUpDrug(displayName)
+  │   ├ OperationEntityMap[name]
+  │   │     → runtime?.perform(operationId:)
+  │   │         ├ branch 守门：pendingBranchParent != nil 时只接 branch 子项
+  │   │         ├ effect.monitorChange → currentMonitor.applying → scene.applyMonitor → HUD 刷
+  │   │         ├ branchOperations? → pendingBranchParent = op.id（等用户点 branch）
+  │   │         ├ popup? → activePopup（SwiftUI alert）；pendingTargetState 暂存
+  │   │         ├ targetState? → transition(to:)，新 state.monitor 应用到 HUD
+  │   │         └ log.append OperationLogEntry
+  │   └ pickableInstruments → pickUpInstrument（显示旧组、隐藏新组、改 holdingItem）
+  └ 其它 → [Tap] no handler matched (warning)
+```
+
+### 6.3 退场流程
+
+```
+用户按数字表冠 / dismissImmersiveSpace
+  ↓
+ImmersiveView .onDisappear:
+  ├ audioService.stopAll()           两条循环音停
+  ├ appModel.stopVideoOverlay()      取消 10s 计时 + 停 video + isVideoFloated=false
+  └ openWindow(id:"main")            重开 2D 窗口（避免无可见 scene 时 app 退出）
+  ↓
+ImmersiveSpace.onDisappear → immersiveSpaceState = .closed
+  ↓
+ContentView 重新显示按钮（state != .open 触发条件）
 ```
 
 ---
@@ -415,30 +594,35 @@ viewModel.handleTapGesture(entity:)
 
 | 模块 | 状态 | 备注 |
 |------|------|------|
-| 3D 场景加载 | ✅ | `ORScene.usdz` 通过 Git LFS 管理 |
-| 抽屉开关交互 | ⚠️ | 见下方"命名不一致" |
+| 3D 场景加载 | ✅ | `ORScene.usdz`（之前 LFS 已停用） |
+| 抽屉开关交互 | ✅ | 已修：`CollidableEntities.drawer.contains(name)` |
+| 抽屉拿药 | ✅ | drawer 002–005 → DrugMap → pickUpDrug |
 | 吸引器展开/折叠 | ✅ | `isPipesExpanded` 状态机 + 幂等守卫 |
-| 器械拾取（HUD 显示） | ✅ | 单组持有，切换时自动复位 |
+| 器械拾取 | ✅ | 单组持有，切换时自动复位（含药品互斥） |
 | 头部跟踪 HUD | ✅ | 60 FPS 跟随，左下视野 |
+| ScenarioRuntime Phase 1 | ✅ | state 切换、绝对值/delta、popup、targetState、log、branch 守门 |
+| ScenarioRuntime Phase 2 | ❌ | state1 退化插值、effect.duration boost、onNoOperation 超时、tick 循环 |
+| ScenarioRuntime Phase 3 | ⚠️ | autoVideo 已实现（10s → 浮窗），courseEnd 总结视图未做 |
+| 音频循环 | ✅ | AudioService 多轨 + toggleSound |
+| 视频循环 + 浮窗化 | ✅ | BreathingVideoPlayer + AppModel.startVideoOverlay |
 | 麻醉监护仪按钮交互 | ❌ | `Anes` 枚举已定义，`handleTapGesture` 未处理 |
 | 面罩佩戴/摘除 | ❌ | `masked` / `unmasked` 已定义，无交互逻辑 |
-| 监护仪屏幕生命体征显示 | ❌ | 历史 `BlackViewManager` / `ScreenOverlayManager` 已在 commit `b047014` 移除，待重新设计 |
-| 视频播放 | ⚠️ | `videoURL = nil`，框架就绪但未启用 |
-| 网络层 | ⚠️ | 架构完整，`fetchInitialData` 为占位 |
+| 监护仪屏幕生命体征显示 | ❌ | 当前只通过 HUD 文字显示，未投影到 3D 屏幕 |
+| 沉浸内 3D 退出按钮 | ❌ | 浮窗化后 2D 窗口被 dismiss，目前只能数字表冠退出 |
+| 真实后端接入 | ⚠️ | `ScenarioService.fetchScenario` 路径占位；`fetchInitialData` 占位 |
 
-### 7.2 待确认问题（建议人工核对）
+### 7.2 待确认 / 历史遗留
 
-1. **抽屉命名不一致**
-   - `Drawer` 枚举 rawValue：`drawer_001` ~ `drawer_005`
-   - `handleTapGesture` switch 匹配：`drawer_1` ~ `drawer_5`
-   - `CollidableEntities.drawer` 由枚举 rawValue 派生（即 `drawer_001` 等）
-   - 当前点击不会命中 switch 的字面字符串，建议要么统一为 `drawer_001` ~ `drawer_005`，要么核实场景里是否同时存在两套命名（父/子层级）。
+1. **`generateAllCollisionShapes` 中的占位 `ShapeResource`**
+   所有可点击实体被赋予 `generateBox(size: .one)` 的 1×1×1 米碰撞盒，可能与实际几何不匹配（命中区域过大）。`loadRoomIfNeeded` 已调用过 `generateCollisionShapes(recursive: true)`，强制覆盖是否必要值得复审。
 
-2. **`generateAllCollisionShapes` 中的占位 `ShapeResource`**
-   - 所有可点击实体都被赋予 `generateBox(size: .one)` 的 1×1×1 米碰撞盒，可能与实际几何不匹配（命中区域过大）。`loadRoomIfNeeded` 已经调用过 `generateCollisionShapes(recursive: true)`，理论上 RealityKit 会基于 mesh 生成碰撞，这里的强制覆盖是否必要值得复审。
+2. **APIConfig 的占位 URL** — 上线前必须替换。`ScenarioService.fetchScenario` 的 `/placeholder` path 同样待定。
 
-3. **APIConfig 的占位 URL** — 上线前必须替换。
+3. **`AVPlayerView.swift` / `AVPlayerViewModel.swift` 是死代码**
+   `videoURL = nil`，`play()` 立刻 return，WindowGroup 那条 `isPlaying ? AVPlayerView` 分支永远走不到。视频功能改用 `BreathingVideoPlayer`，这两个文件可以择期删除。
 
-4. **`AVPlayerViewModel.videoURL = nil`** — 当前 `play()` 是空操作，需补 bundle 内或远端视频 URL。
+4. **`OperationEntityMap.entityToOperationId` 是空字典**
+   3D 资源里需要为每个 ScenarioOperation 准备一个可点击实体（药瓶 / 球囊 / 操作图标），实体名 ready 后填进 map。当前所有临床操作触发都得手动调 `runtime.triggerXxx()`。
 
-5. **`ImmersiveView` HUD 注释与值不符** — [ImmersiveView.swift:32-36](VirtualOR/ImmersiveView.swift:32) 注释里写的 `-0.15 / -0.12 / -0.50`，但实际 `position` 用的是 `(-0.35, -0.22, -0.5)`。注释滞后，可顺手对齐。
+5. **沉浸里没有退出按钮**
+   视频浮窗化后 `dismissWindow("main")` 把 2D 窗口连同 Hide 按钮都关了；用户只能数字表冠退。如果要做内置退出，可在 HUD attachment 里加一个 SwiftUI Button 调 `dismissImmersiveSpace`，或加一个 3D 按钮 entity。

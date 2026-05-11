@@ -9,7 +9,13 @@
       "Bash(git rm *)",
       "Read(//Users/geding/Downloads/VRScene/**)",
       "Bash(xcodebuild -project /Users/geding/Documents/VirtualOR/VirtualOR.xcodeproj -scheme VirtualOR -destination 'platform=visionOS Simulator,name=Apple Vision Pro' build)",
-      "Bash(xcodebuild -project /Users/geding/Documents/VirtualOR/VirtualOR.xcodeproj -scheme VirtualOR -destination 'platform=visionOS Simulator,id=FB652FE1-8226-4191-94BA-B378EE01059C' build)"
+      "Bash(xcodebuild -project /Users/geding/Documents/VirtualOR/VirtualOR.xcodeproj -scheme VirtualOR -destination 'platform=visionOS Simulator,id=FB652FE1-8226-4191-94BA-B378EE01059C' build)",
+      "Bash(git config *)",
+      "Bash(echo \"global user.name = $\\(git config --global --get user.name\\)\")",
+      "Bash(echo \"global user.email = $\\(git config --global --get user.email\\)\")",
+      "Bash(ssh -T -o StrictHostKeyChecking=accept-new git@github-personal)",
+      "Bash(git fetch *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
