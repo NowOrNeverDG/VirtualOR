@@ -19,9 +19,6 @@ class ORSceneViewModel {
     private(set) var rootEntity: Entity?
     var loadError: Error?
     
-    private var drawerStates: [String: Bool] = [:]
-    private let drawerOpenDistance: Float = 1
-    
     private var isPipesExpanded: Bool = false
 
     /// 当前手持的器械显示名，"nothing" 表示未持有
@@ -46,12 +43,21 @@ class ORSceneViewModel {
     @ObservationIgnored
     weak var runtime: ScenarioRuntime?
 
-    /// 幂等加载剧情数据（mock）。加载完会用 initialState.monitor 覆盖 6 个 vital。
+    /// 剧情数据服务（依赖注入）。默认 Mock（读 resource.json）；
+    /// 后端 API ready 后构造时传 `ScenarioService()` 即可，无需改本类。
+    @ObservationIgnored
+    private let scenarioService: ScenarioServicing
+
+    init(scenarioService: ScenarioServicing = MockScenarioService()) {
+        self.scenarioService = scenarioService
+    }
+
+    /// 幂等加载剧情数据。加载完会用 initialState.monitor 覆盖 6 个 vital。
     @discardableResult
     func loadScenarioIfNeeded() async -> Scenario? {
         if let scenario { return scenario }
         do {
-            let s = try await ScenarioService.fetchMockScenario()
+            let s = try await scenarioService.fetchScenario()
             self.scenario = s
             applyMonitor(s.initialState.monitor)
             logger.info("Loaded scenario: \(s.title)")
@@ -120,10 +126,14 @@ class ORSceneViewModel {
             logger.info("[Tap] → collapsePipes")
             collapsePipes()
         default:
-            if CollidableEntities.drawer.contains(name) {
-                logger.info("[Tap] → toggleDrawer (matched in CollidableEntities.drawer)")
-                toggleDrawer(entity)
-            } else if let opId = OperationEntityMap.entityToOperationId[name] {
+            // 抽屉：不再 3D 滑出，命中 DrugMap 就直接拿药（holdingItem 切到该药品）
+            if CollidableEntities.drawer.contains(name),
+               let drugName = DrugMap.drawerToDisplayName[name] {
+                logger.info("[Tap] → pickUpDrug from drawer \(name)")
+                pickUpDrug(displayName: drugName)
+            }
+
+            if let opId = OperationEntityMap.operationId(for: name) {
                 logger.info("[Tap] → runtime.perform(\(opId))")
                 runtime?.perform(operationId: opId)
             } else if CollidableEntities.pickableInstruments.contains(name) {
@@ -213,49 +223,6 @@ class ORSceneViewModel {
         logger.info("[Hold] picked up drug: \(displayName)")
     }
 
-    //MARK: Drawer Logic
-    private func toggleDrawer(_ entity: Entity) {
-        let entityName = entity.name
-        let isCurrentlyOpen = drawerStates[entityName] ?? false
-        
-        if isCurrentlyOpen {
-            // 关闭 drawer
-            closeDrawer(entity)
-        } else {
-            // 打开 drawer
-            openDrawer(entity)
-        }
-    }
-    
-    private func openDrawer(_ entity: Entity) {
-        let entityName = entity.name
-        moveEntity(entity, axis: .z, delta: -drawerOpenDistance)
-        drawerStates[entityName] = true
-        if let drugName = DrugMap.drawerToDisplayName[entityName] {
-            pickUpDrug(displayName: drugName)
-        }
-        logger.info("[Drawer] opened \(entityName)")
-    }
-
-    private func closeDrawer(_ entity: Entity) {
-        let entityName = entity.name
-        moveEntity(entity, axis: .z, delta: drawerOpenDistance)
-        drawerStates[entityName] = false
-        logger.info("[Drawer] closed \(entityName)")
-    }
-    
-
-    private enum Axis { case x, y, z }
-    
-    private func moveEntity(_ entity: Entity, axis: Axis, delta: Float) {
-        var transform = entity.transform
-        switch axis {
-        case .x: transform.translation.x += delta
-        case .y: transform.translation.y += delta
-        case .z: transform.translation.z += delta
-        }
-        entity.move(to: transform, relativeTo: entity.parent, duration: 0, timingFunction: .linear)
-    }
 }
 
 extension ORSceneViewModel {
