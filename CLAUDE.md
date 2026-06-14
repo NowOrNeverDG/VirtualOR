@@ -41,11 +41,11 @@ xcodebuild -project /Users/geding/Documents/VirtualOR/VirtualOR.xcodeproj \
 
 | 文件 | 职责 |
 |---|---|
-| [VirtualOR/Model/ScenarioRuntime.swift](VirtualOR/Model/ScenarioRuntime.swift) | 状态机：state 切换 / op 执行 / popup / branch 守门 / log |
-| [VirtualOR/Model/ScenarioModel.swift](VirtualOR/Model/ScenarioModel.swift) | 后端 JSON 的 Codable struct（Scenario / Monitor / ValueChange 等） |
-| [VirtualOR/ORSceneViewModel/ORSceneViewModel.swift](VirtualOR/ORSceneViewModel/ORSceneViewModel.swift) | 3D 场景 + HUD vitals + drawer / pipe / 拿东西 |
-| [VirtualOR/Model/ORSceneModel.swift](VirtualOR/Model/ORSceneModel.swift) | 实体命名 enum（`Drawer` / `Anes` / `Suction`）+ `CollidableEntities` + `DrugMap` |
-| [VirtualOR/ImmersiveView.swift](VirtualOR/ImmersiveView.swift) | RealityKit 沉浸视图，连 viewModel + runtime + alert |
+| [VirtualOR/ViewModels/ScenarioRuntime.swift](VirtualOR/ViewModels/ScenarioRuntime.swift) | 状态机：state 切换 / op 执行 / popup / branch 守门 / log |
+| [VirtualOR/Models/ScenarioModel.swift](VirtualOR/Models/ScenarioModel.swift) | 后端 JSON 的 Codable struct（Scenario / Monitor / ValueChange 等） |
+| [VirtualOR/ViewModels/ORSceneViewModel.swift](VirtualOR/ViewModels/ORSceneViewModel.swift) | 3D 场景 + HUD vitals + drawer 拿药 / pipe / 拿东西 |
+| [VirtualOR/Models/ORSceneModel.swift](VirtualOR/Models/ORSceneModel.swift) | 实体命名 enum（`Drawer` / `Anes` / `Suction`）+ `CollidableEntities` + `DrugMap` |
+| [VirtualOR/Views/ImmersiveView.swift](VirtualOR/Views/ImmersiveView.swift) | RealityKit 沉浸视图，连 viewModel + runtime + alert |
 
 更深的细节问 [project_structure.md](project_structure.md)
 （CLAUDE.md 是路标，project_structure 是地图）。
