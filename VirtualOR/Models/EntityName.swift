@@ -7,7 +7,7 @@
 //
 //  - Suction              吸引器（展开 pipe_1/2/connection、卷起 bent_pipe）
 //  - Drawer               5 个抽屉本体 + 抽屉内各类器械部件
-//  - Anes                 麻醉监护仪按钮 / 屏幕 / 面罩相关
+//  - AnesMonitor          麻醉监护仪按钮 / 屏幕 / 面罩相关
 //  - OperationEntityName   散装的操作触发实体（人体模型 / branch 占位）
 //  - SceneAsset           RealityKitContent 里的场景资源名
 //
@@ -75,7 +75,7 @@ enum Drawer: String {
     case laryngealDuct5 = "duct_005"
 }
 
-enum Anes: String {
+enum AnesMonitor: String {
     case autoButton = "monitor_knob_001"
     case manualButton = "monitor_knob_005"
     case manualTrigger = "monitor_knob_trigger"
@@ -89,7 +89,7 @@ enum Anes: String {
     case unmaskedPart4 = "face_shield_monitor_004"
 }
 
-/// 触发剧情 operation 的散装实体名（Drawer / Anes 已有归属的不在此列）。
+/// 触发剧情 operation 的散装实体名（Drawer / AnesMonitor 已有归属的不在此列）。
 enum OperationEntityName: String {
     case humanModel = "steve_001"               // 人体模型：托下颌
 

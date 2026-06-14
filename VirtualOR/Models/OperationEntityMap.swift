@@ -45,7 +45,7 @@ enum StateOneOperationTrigger: CaseIterable, OperationTrigger {
     var entityName: String {
         switch self {
         case .jawThrust:        OperationEntityName.humanModel.rawValue   // steve_001
-        case .increaseOxygen:   Anes.autoButton.rawValue                  // monitor_knob_001
+        case .increaseOxygen:   AnesMonitor.autoButton.rawValue           // monitor_knob_001
         case .propofolIV:       Drawer.drawer2.rawValue                   // drawer_2     → Propofol
         case .noEffectDrugs:    Drawer.drawer3.rawValue                   // drawer_003   → Salbutamol
         case .antagonistDrugs:  Drawer.drawer4.rawValue                   // drawer_004   → 氟马西尼/纳洛酮

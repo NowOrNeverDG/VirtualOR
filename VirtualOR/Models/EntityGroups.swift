@@ -1,24 +1,24 @@
 //
-//  ORSceneModel.swift
+//  EntityGroups.swift
 //  VirtualOR
 //
 //  Created by Ge Ding on 2026/2/1.
 //
+//  派生的实体分组与映射：实体分组（CollidableEntities）+ 抽屉→药品映射（DrugMap），
+//  都构建在 EntityName.swift 的实体名枚举之上。
+//
 
 import Foundation
-
-// 实体名枚举（Suction / Drawer / Anes / OperationEntityName / SceneAsset）集中在
-// EntityName.swift。本文件只放派生的实体分组（CollidableEntities）与抽屉→药品映射（DrugMap）。
 
 enum CollidableEntities {
     static var suctionExpanded: [String] = [Suction.pipeRollUpTop, Suction.pipeRollUpBottom, Suction.pipeConnection].map { $0.rawValue }
     static var suctionCollapsed: [String] = [Suction.bentPipe].map { $0.rawValue }
     static var drawer: [String] = [Drawer.drawer1,Drawer.drawer2,Drawer.drawer3, Drawer.drawer4, Drawer.drawer5].map { $0.rawValue }
-    static var anesAdjustButton: [String] = [Anes.autoButton, Anes.manualButton].map{ $0.rawValue}
-    static var mainScreen: String = Anes.mainScreen.rawValue
-    static var submainScreen: String = Anes.submainScreen.rawValue
-    static var anesMasked: [String] = [Anes.masked].map { $0.rawValue }
-    static var anesUnmasked: [String] = [Anes.unmaskedPipe, Anes.unmaskedPart1, Anes.unmaskedPart2, Anes.unmaskedPart3, Anes.unmaskedPart4].map { $0.rawValue }
+    static var anesAdjustButton: [String] = [AnesMonitor.autoButton, AnesMonitor.manualButton].map{ $0.rawValue}
+    static var mainScreen: String = AnesMonitor.mainScreen.rawValue
+    static var submainScreen: String = AnesMonitor.submainScreen.rawValue
+    static var anesMasked: [String] = [AnesMonitor.masked].map { $0.rawValue }
+    static var anesUnmasked: [String] = [AnesMonitor.unmaskedPipe, AnesMonitor.unmaskedPart1, AnesMonitor.unmaskedPart2, AnesMonitor.unmaskedPart3, AnesMonitor.unmaskedPart4].map { $0.rawValue }
 
     /// 器械分组：每组包含显示名称和所有部件实体名
     struct InstrumentGroup {

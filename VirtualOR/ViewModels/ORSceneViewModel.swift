@@ -36,20 +36,20 @@ class ORSceneViewModel {
     var temperature: Double = 36.8   // 体温 ℃
 
     //MARK: Scenario
-    /// 剧情数据，由 loadScenarioIfNeeded() 从 ScenarioService 拉取后赋值
+    /// 剧情数据，由 loadScenarioIfNeeded() 从 ScenarioRepository 拉取后赋值
     private(set) var scenario: Scenario?
 
     /// 状态机运行时（由 ImmersiveView 注入）。临床操作通过 handleTapGesture 路由到这里。
     @ObservationIgnored
     weak var runtime: ScenarioRuntime?
 
-    /// 剧情数据服务（依赖注入）。默认 Mock（读 resource.json）；
-    /// 后端 API ready 后构造时传 `ScenarioService()` 即可，无需改本类。
+    /// 剧情数据访问（依赖注入）。默认 Mock（读 resource.json）；
+    /// 后端 API ready 后构造时传 `LiveScenarioRepository()` 即可，无需改本类。
     @ObservationIgnored
-    private let scenarioService: ScenarioServicing
+    private let repository: ScenarioRepository
 
-    init(scenarioService: ScenarioServicing = MockScenarioService()) {
-        self.scenarioService = scenarioService
+    init(repository: ScenarioRepository = MockScenarioRepository()) {
+        self.repository = repository
     }
 
     /// 幂等加载剧情数据。加载完会用 initialState.monitor 覆盖 6 个 vital。
@@ -57,7 +57,7 @@ class ORSceneViewModel {
     func loadScenarioIfNeeded() async -> Scenario? {
         if let scenario { return scenario }
         do {
-            let s = try await scenarioService.fetchScenario()
+            let s = try await repository.fetchScenario()
             self.scenario = s
             applyMonitor(s.initialState.monitor)
             logger.info("Loaded scenario: \(s.title)")
