@@ -1,5 +1,5 @@
 //
-//  ScenarioRepository.swift
+//  CourseRepository.swift
 //  VirtualOR
 //
 //  剧情数据访问接口。Live（真实 API）与 Mock（本地 resource.json）都遵守它，
@@ -8,7 +8,7 @@
 
 import Foundation
 
-protocol ScenarioRepository: Sendable {
-    /// 拉取一份剧情数据（结构见 ScenarioModel.Scenario）。
-    func fetchScenario() async throws -> Scenario
+protocol CourseRepository: Sendable {
+    /// 拉取一份剧情数据（结构见 CourseModel.Course）。
+    func fetchCourse() async throws -> Course
 }

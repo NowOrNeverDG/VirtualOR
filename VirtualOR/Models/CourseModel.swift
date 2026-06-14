@@ -1,5 +1,5 @@
 //
-//  ScenarioModel.swift
+//  CourseModel.swift
 //  VirtualOR
 //
 //  剧情数据 Codable 模型 —— 与后端 JSON 一一对应。
@@ -9,12 +9,12 @@ import Foundation
 
 // MARK: - 顶层
 
-struct Scenario: Codable {
+struct Course: Codable {
     let version: String
     let title: String
     let totalDuration: Int
     let initialState: InitialState
-    let states: [ScenarioState]
+    let states: [CourseState]
     let endState: EndState
 }
 
@@ -32,7 +32,7 @@ struct EndState: Codable {
 
 // MARK: - State
 
-struct ScenarioState: Codable {
+struct CourseState: Codable {
     let id: String
     let name: String
     let description: String?
@@ -40,7 +40,7 @@ struct ScenarioState: Codable {
     let autoVideo: AutoVideo?
     let monitor: StateMonitor
     let onNoOperation: NextStateRef?
-    let operations: [ScenarioOperation]?
+    let operations: [CourseOperation]?
     let targetState: String?
 }
 
@@ -117,8 +117,8 @@ struct NIBP: Codable {
 
 // MARK: - Operation
 
-/// 注：避开 Foundation.Operation 重名，命名为 ScenarioOperation。
-struct ScenarioOperation: Codable {
+/// 注：避开 Foundation.Operation 重名，命名为 CourseOperation。
+struct CourseOperation: Codable {
     let id: String
     let name: String
     let effect: OperationEffect?
@@ -126,7 +126,7 @@ struct ScenarioOperation: Codable {
     let popup: Popup?
     let log: String?
     let targetState: String?
-    let branchOperations: [ScenarioOperation]?
+    let branchOperations: [CourseOperation]?
 }
 
 struct OperationEffect: Codable {

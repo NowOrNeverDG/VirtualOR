@@ -27,7 +27,7 @@ class ORSceneViewModel {
     private var currentHeldGroup: CollidableEntities.InstrumentGroup?
 
     //MARK: Patient Vitals (HUD 实时显示)
-    // 默认值与 mock initialState.monitor 保持一致，scenario 加载完成后会被 applyMonitor 重新覆盖
+    // 默认值与 mock initialState.monitor 保持一致，course 加载完成后会被 applyMonitor 重新覆盖
     var nibpSystolic: Int = 98       // 收缩压 mmHg
     var nibpDiastolic: Int = 56      // 舒张压 mmHg
     var spo2: Int = 100              // 血氧饱和度 %
@@ -35,35 +35,35 @@ class ORSceneViewModel {
     var rr: Int = 20                 // 呼吸频率 次/分
     var temperature: Double = 36.8   // 体温 ℃
 
-    //MARK: Scenario
-    /// 剧情数据，由 loadScenarioIfNeeded() 从 ScenarioRepository 拉取后赋值
-    private(set) var scenario: Scenario?
+    //MARK: Course
+    /// 剧情数据，由 loadCourseIfNeeded() 从 CourseRepository 拉取后赋值
+    private(set) var course: Course?
 
     /// 状态机运行时（由 ImmersiveView 注入）。临床操作通过 handleTapGesture 路由到这里。
     @ObservationIgnored
-    weak var runtime: ScenarioRuntime?
+    weak var runtime: CourseRuntime?
 
     /// 剧情数据访问（依赖注入）。默认 Mock（读 resource.json）；
-    /// 后端 API ready 后构造时传 `LiveScenarioRepository()` 即可，无需改本类。
+    /// 后端 API ready 后构造时传 `LiveCourseRepository()` 即可，无需改本类。
     @ObservationIgnored
-    private let repository: ScenarioRepository
+    private let repository: CourseRepository
 
-    init(repository: ScenarioRepository = MockScenarioRepository()) {
+    init(repository: CourseRepository = MockCourseRepository()) {
         self.repository = repository
     }
 
     /// 幂等加载剧情数据。加载完会用 initialState.monitor 覆盖 6 个 vital。
     @discardableResult
-    func loadScenarioIfNeeded() async -> Scenario? {
-        if let scenario { return scenario }
+    func loadCourseIfNeeded() async -> Course? {
+        if let course { return course }
         do {
-            let s = try await repository.fetchScenario()
-            self.scenario = s
+            let s = try await repository.fetchCourse()
+            self.course = s
             applyMonitor(s.initialState.monitor)
-            logger.info("Loaded scenario: \(s.title)")
+            logger.info("Loaded course: \(s.title)")
             return s
         } catch {
-            logger.error("Failed to load scenario: \(error.localizedDescription)")
+            logger.error("Failed to load course: \(error.localizedDescription)")
             return nil
         }
     }

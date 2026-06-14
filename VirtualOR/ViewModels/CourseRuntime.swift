@@ -1,5 +1,5 @@
 //
-//  ScenarioRuntime.swift
+//  CourseRuntime.swift
 //  VirtualOR
 //
 //  剧情状态机运行时（Phase 1）：
@@ -14,11 +14,11 @@
 import Foundation
 import os
 
-private let logger = Logger(subsystem: "com.app.VirtualOR", category: "ScenarioRuntime")
+private let logger = Logger(subsystem: "com.app.VirtualOR", category: "CourseRuntime")
 
 @MainActor
 @Observable
-final class ScenarioRuntime {
+final class CourseRuntime {
     private(set) var currentStateId: String = ""
     private(set) var currentStateName: String = ""
     private(set) var activePopup: Popup?
@@ -27,16 +27,16 @@ final class ScenarioRuntime {
     private(set) var isCourseEnded: Bool = false
 
     private weak var scene: ORSceneViewModel?
-    private var scenario: Scenario?
+    private var course: Course?
     private var currentMonitor: Monitor = .zero
     private var pendingTargetState: String?
 
-    func start(scene: ORSceneViewModel, scenario: Scenario) {
+    func start(scene: ORSceneViewModel, course: Course) {
         self.scene = scene
-        self.scenario = scenario
-        self.currentMonitor = scenario.initialState.monitor
+        self.course = course
+        self.currentMonitor = course.initialState.monitor
         // Phase 1：没有 10s 倒计时，直接进入第一个 state（通常是 state1）
-        if let firstState = scenario.states.first {
+        if let firstState = course.states.first {
             transition(to: firstState.id)
         }
     }
@@ -67,8 +67,8 @@ final class ScenarioRuntime {
 
     // MARK: - Private
 
-    private func resolveOperation(id: String) -> ScenarioOperation? {
-        guard let state = currentScenarioState() else { return nil }
+    private func resolveOperation(id: String) -> CourseOperation? {
+        guard let state = currentCourseState() else { return nil }
         if let parentId = pendingBranchParent {
             let parent = state.operations?.first { $0.id == parentId }
             return parent?.branchOperations?.first { $0.id == id }
@@ -76,7 +76,7 @@ final class ScenarioRuntime {
         return state.operations?.first { $0.id == id }
     }
 
-    private func applyOperation(_ op: ScenarioOperation) {
+    private func applyOperation(_ op: CourseOperation) {
         log.append(OperationLogEntry(opId: op.id, timestamp: Date(), stateId: currentStateId))
         logger.debug("Perform op: \(op.id) (\(op.name))")
 
@@ -109,12 +109,12 @@ final class ScenarioRuntime {
 
     private func transition(to stateId: String) {
         currentStateId = stateId
-        if stateId == scenario?.endState.id {
+        if stateId == course?.endState.id {
             currentStateName = "课程结束"
             isCourseEnded = true
             return
         }
-        guard let state = scenario?.states.first(where: { $0.id == stateId }) else {
+        guard let state = course?.states.first(where: { $0.id == stateId }) else {
             logger.warning("State not found: \(stateId)")
             return
         }
@@ -130,8 +130,8 @@ final class ScenarioRuntime {
         scene?.applyMonitor(monitor)
     }
 
-    private func currentScenarioState() -> ScenarioState? {
-        scenario?.states.first { $0.id == currentStateId }
+    private func currentCourseState() -> CourseState? {
+        course?.states.first { $0.id == currentStateId }
     }
 }
 
@@ -150,7 +150,7 @@ struct OperationLogEntry {
 // 调用合法性（当前状态是否允许、是否处于 branch 模式、是否被 popup 阻塞）由 perform
 // 自动判断，调用方不需要预检。
 
-extension ScenarioRuntime {
+extension CourseRuntime {
     /// 托下颌 —— NIBP +10/+5、HR +20、RR +3
     func triggerJawThrust() { perform(operationId: "jawThrust") }
 

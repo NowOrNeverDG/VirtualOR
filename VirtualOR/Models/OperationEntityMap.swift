@@ -2,7 +2,7 @@
 //  OperationEntityMap.swift
 //  VirtualOR
 //
-//  3D 实体名 → ScenarioOperation.id 的映射（协议化 / POP）。
+//  3D 实体名 → CourseOperation.id 的映射（协议化 / POP）。
 //
 //  设计：每个「点击实体 → 触发 operation」绑定都遵守 OperationTrigger 协议，
 //  统一收在 OperationEntityMap.triggers。要接入新的可点操作，只需新增一个遵守
@@ -18,7 +18,7 @@ import Foundation
 protocol OperationTrigger {
     /// 被点击的 3D 实体名
     var entityName: String { get }
-    /// 对应的 ScenarioOperation.id（state1 主操作或 branch 子操作）
+    /// 对应的 CourseOperation.id（state1 主操作或 branch 子操作）
     var operationId: String { get }
 }
 

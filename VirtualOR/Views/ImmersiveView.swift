@@ -15,7 +15,7 @@ struct ImmersiveView: View {
     @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.openWindow) private var openWindow
     @State private var viewModel = ORSceneViewModel()
-    @State private var runtime = ScenarioRuntime()
+    @State private var runtime = CourseRuntime()
     @State private var audioService = AudioService()
     @State private var headTrackingManager = HeadTrackingManager()
     @State private var hudEntity = Entity()
@@ -35,10 +35,10 @@ struct ImmersiveView: View {
             content.add(rootEntity)
             viewModel.prepareForRoom()
 
-            // Load scenario and start the state machine
-            if let scenario = await viewModel.loadScenarioIfNeeded() {
+            // Load course and start the state machine
+            if let course = await viewModel.loadCourseIfNeeded() {
                 viewModel.runtime = runtime
-                runtime.start(scene: viewModel, scenario: scenario)
+                runtime.start(scene: viewModel, course: course)
             }
 
             // Add HUD entity (will track head position)
