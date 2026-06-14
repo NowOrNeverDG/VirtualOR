@@ -1,8 +1,8 @@
 # VirtualOR 项目结构文档
 
 > 最后同步：2026-06-14
-> 基于 commit：`dbbc968 docs: sync project_structure for EntityName + Scenario service split`（+ 未提交：命名合理化 —— ScenarioRepository / AnesMonitor / EntityGroups.swift）
-> 该文档反映当前代码库的实际状态，含标准 MVVM 分层目录、ScenarioRuntime 状态机、AudioService 多轨循环、BreathingVideoPlayer 浮窗化、resource.json mock 数据链路，以及 OperationEntityMap 的协议化（POP）实体→操作映射。
+> 基于 commit：`92efaae docs: sync naming rationalization (Repository / AnesMonitor / EntityGroups)`（+ 未提交：领域词 Scenario → Course 全量重命名）
+> 该文档反映当前代码库的实际状态，含标准 MVVM 分层目录、CourseRuntime 状态机、AudioService 多轨循环、BreathingVideoPlayer 浮窗化、resource.json mock 数据链路，以及 OperationEntityMap 的协议化（POP）实体→操作映射。
 
 ---
 
@@ -77,20 +77,20 @@ VirtualOR/
     ├── ViewModels/                            # @Observable 视图模型
     │   ├── ORSceneViewModel.swift             # 场景交互核心 + HUD vitals
     │   ├── ORSceneViewModel+Tools.swift       # DEBUG 调试工具
-    │   └── ScenarioRuntime.swift              # 临床状态机 VM（state 切换 / op / popup / log）
+    │   └── CourseRuntime.swift              # 临床状态机 VM（state 切换 / op / popup / log）
     │
     ├── Models/                                # 纯数据 / 领域模型 / 映射
     │   ├── EntityName.swift                   # 3D 实体名唯一注册处（Suction/Drawer/Anes/OperationEntityName/SceneAsset）
-    │   ├── ScenarioModel.swift                # 后端 JSON Codable struct
+    │   ├── CourseModel.swift                # 后端 JSON Codable struct
     │   ├── Monitor+Apply.swift                # MonitorChange 应用（absolute / delta）
     │   ├── EntityGroups.swift                 # 派生分组 CollidableEntities + DrugMap
     │   └── OperationEntityMap.swift           # POP 实体名 → operationId 映射
     │
     ├── Services/                              # 领域服务 / 系统能力封装
-    │   ├── Scenario/                          # 剧情数据访问（protocol + Live + Mock）
-    │   │   ├── ScenarioRepository.swift       #   protocol：fetchScenario() async throws
-    │   │   ├── LiveScenarioRepository.swift   #   Live：走 APIService（占位 /placeholder）
-    │   │   └── MockScenarioRepository.swift   #   Mock：读 bundle resource.json
+    │   ├── Course/                          # 剧情数据访问（protocol + Live + Mock）
+    │   │   ├── CourseRepository.swift       #   protocol：fetchCourse() async throws
+    │   │   ├── LiveCourseRepository.swift   #   Live：走 APIService（占位 /placeholder）
+    │   │   └── MockCourseRepository.swift   #   Mock：读 bundle resource.json
     │   ├── AudioService.swift                 # 多轨循环音 + 总开关
     │   ├── BreathingVideoPlayer.swift         # AVPlayerLooper 无缝循环视频
     │   └── HeadTrackingManager.swift          # 头部位姿跟踪
@@ -102,7 +102,7 @@ VirtualOR/
     │   └── APIService.swift
     │
     ├── Resources/
-    │   ├── resource.json                      # mock 剧情数据（MockScenarioRepository 从 bundle 读取）
+    │   ├── resource.json                      # mock 剧情数据（MockCourseRepository 从 bundle 读取）
     │   ├── Audio/
     │   │   ├── abnormal_breath.m4a            # 呼吸困难循环音
     │   │   └── background_music.m4a           # 背景音乐循环
@@ -138,11 +138,11 @@ VirtualOR/
 │  │ isVideoFloated       │   │  │  rootEntity / drawer 拿药    │  │
 │  │ loadingState         │   │  │  isPipesExpanded             │  │
 │  └──────────────────────┘   │  │  holdingItem / heldGroup     │  │
-│                              │  │  scenario / weak runtime     │  │
+│                              │  │  course / weak runtime     │  │
 │                              │  └──┬───────────────────────────┘  │
 │                              │     │                              │
 │                              │  ┌──┴────────────┐                 │
-│                              │  │ScenarioRuntime│                 │
+│                              │  │CourseRuntime│                 │
 │                              │  │ stateId / log │                 │
 │                              │  │ branch / popup│                 │
 │                              │  └───────────────┘                 │
@@ -152,19 +152,19 @@ VirtualOR/
 │                              │  └────────────┘ └────────────────┘│
 ├─────────────────────────────┴────────────────────────────────────┤
 │                       Services / Networking Layer                 │
-│  ORSceneViewModel → repository.fetchScenario()  (注入)             │
-│   Mock → Bundle resource.json → JSONDecoder → Scenario            │
-│   Live → APIService.request → Scenario（占位 /placeholder）        │
+│  ORSceneViewModel → repository.fetchCourse()  (注入)             │
+│   Mock → Bundle resource.json → JSONDecoder → Course            │
+│   Live → APIService.request → Course（占位 /placeholder）        │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 ### 3.2 设计模式
 
 - **MVVM + 分层目录**：`App/`（入口+全局）、`Views/`（纯视图）、`ViewModels/`（@Observable VM）、`Models/`（数据/领域）、`Services/`（领域服务+系统封装）、`Networking/`（HTTP 基础件）。
-- **`AppModel` 管全局**；`ORSceneViewModel` 管 3D 场景与 HUD vitals；`ScenarioRuntime` 管临床状态机；视图层（`ContentView` / `ImmersiveView`）保持薄。
+- **`AppModel` 管全局**；`ORSceneViewModel` 管 3D 场景与 HUD vitals；`CourseRuntime` 管临床状态机；视图层（`ContentView` / `ImmersiveView`）保持薄。
 - **`@Observable` + `@MainActor`**：所有 ViewModel / Service 用 `@Observable` 宏，跑在 `@MainActor`。
 - **Environment 注入**：`AppModel` 通过 `.environment(appModel)` 注入；视图通过 `@Environment(AppModel.self)` 取。
-- **Service / Repository 类**：`AudioService` / `BreathingVideoPlayer` / `HeadTrackingManager` 封装系统能力；`ScenarioRepository`（Live/Mock）封装剧情数据访问。
+- **Service / Repository 类**：`AudioService` / `BreathingVideoPlayer` / `HeadTrackingManager` 封装系统能力；`CourseRepository`（Live/Mock）封装剧情数据访问。
 - **Weak 注入**：`ORSceneViewModel.runtime` 是 `weak var`（避免环），由 `ImmersiveView` 在 start 时回填。
 - **Swift Package 化资源**：3D 资源独立成 `RealityKitContent` 包；音视频 / mock JSON 放主 bundle 的 `Resources/`。
 - **POP 映射**：`OperationEntityMap` 用 `OperationTrigger` 协议把"点击实体 → operationId"统一抽象，可扩展（见 §4.16）。
@@ -226,12 +226,12 @@ VirtualOR/
 | `appModel` | `AppModel` (env) | 访问共享 `videoPlayer` / `isVideoFloated` |
 | `dismissWindow` / `openWindow` | env values | 浮窗化时关 main window；退场时重开 |
 | `viewModel` | `ORSceneViewModel` (state) | 3D 场景与 HUD vitals |
-| `runtime` | `ScenarioRuntime` (state) | 临床状态机 |
+| `runtime` | `CourseRuntime` (state) | 临床状态机 |
 | `audioService` | `AudioService` (state) | 双轨循环音 |
 | `hudEntity` / `videoEntity` | `Entity` (state) | 跟随头部的 HUD 容器 |
 
 **初始化（`make` 闭包）**：
-1. 加载场景、加载 scenario，回填 `viewModel.runtime = runtime` 并 `runtime.start(...)`。
+1. 加载场景、加载 course，回填 `viewModel.runtime = runtime` 并 `runtime.start(...)`。
 2. `hudEntity` 加入 content；`hudText` attachment 定位 `(-0.40, -0.22, -0.5)`（左下）。
 3. `videoEntity` 挂为 `hudEntity` 子节点，定位 `(0.42, -0.18, -0.5)`（右下）；`breathingVideo` attachment 仅在 `appModel.isVideoFloated == true` 时渲染 `VideoPlayer`。
 
@@ -362,15 +362,15 @@ static var anesMasked / anesUnmasked
 | `holdingItem` | `String = "nothing"` | 当前手持的显示名（HUD 绑定，可能是器械或药品） |
 | `currentHeldGroup` | `InstrumentGroup?` | 当前正被"持有"（隐藏中）的器械组；持药品时为 nil |
 | `nibpSystolic / nibpDiastolic / spo2 / hr / rr / temperature` | Int / Double | 6 个生命体征（HUD 绑定） |
-| `scenario` | `Scenario?` | 加载到的剧情数据 |
-| `runtime` | `weak ScenarioRuntime?` | 状态机引用（`@ObservationIgnored`，由 ImmersiveView 回填） |
+| `course` | `Course?` | 加载到的剧情数据 |
+| `runtime` | `weak CourseRuntime?` | 状态机引用（`@ObservationIgnored`，由 ImmersiveView 回填） |
 
 #### 关键方法
 
 | 方法 | 行为 |
 |------|------|
 | `loadRoomIfNeeded()` | 幂等异步加载 `ORScene`（来自 `realityKitContentBundle`） |
-| `loadScenarioIfNeeded() async -> Scenario?` | 幂等加载 mock scenario，把 `initialState.monitor` 应用到 HUD vital；返回剧情对象给调用方 |
+| `loadCourseIfNeeded() async -> Course?` | 幂等加载 mock course，把 `initialState.monitor` 应用到 HUD vital；返回剧情对象给调用方 |
 | `applyMonitor(_ monitor: Monitor)` | Monitor → 6 个 vital 属性的唯一入口；状态机 + 拿药效果都走这里 |
 | `prepareForRoom()` | 生成碰撞体 + 初始化管道状态，DEBUG 下打印实体树 |
 | `handleTapGesture(entity:)` | 实体名分发：`bent_pipe` → expand；`pipe_*` → collapse；**drawer 命中 DrugMap → 直接 `pickUpDrug`（不再 3D 滑出抽屉）**；`OperationEntityMap.operationId(for:)` 命中 → `runtime?.perform(opId)`；`pickableInstruments` → `pickUpInstrument`；其它 → warning |
@@ -430,24 +430,24 @@ ImmersiveView `.task` 启两条：`background_music`（volume 0.5）+ `abnormal_
 
 实例由 `AppModel` 持有，ContentView 与 ImmersiveView 共享渲染。
 
-### 4.12 [Models/ScenarioModel.swift](VirtualOR/Models/ScenarioModel.swift) — 后端 JSON Codable
+### 4.12 [Models/CourseModel.swift](VirtualOR/Models/CourseModel.swift) — 后端 JSON Codable
 
 与后端 JSON 一一对应的纯数据 struct：
 
 | 类型 | 角色 |
 |---|---|
-| `Scenario` | 顶层（version / title / totalDuration / initialState / states / endState） |
+| `Course` | 顶层（version / title / totalDuration / initialState / states / endState） |
 | `InitialState` | 初始 10s 状态 |
-| `ScenarioState` | state1/2/3/4 等节点（含 autoVideo / monitor / onNoOperation / operations / targetState）|
+| `CourseState` | state1/2/3/4 等节点（含 autoVideo / monitor / onNoOperation / operations / targetState）|
 | `StateMonitor` | enum：`.flat(Monitor)` / `.degradable(initial, degradeTo, degradeDuration)` |
 | `Monitor` / `NIBP` | 6 个生命体征基础值 |
-| `ScenarioOperation` | 操作（含 effect / popup / log / targetState / branchOperations）|
+| `CourseOperation` | 操作（含 effect / popup / log / targetState / branchOperations）|
 | `OperationEffect` / `MonitorChange` / `NIBPChange` | 效果应用 |
 | `ValueChange` | enum：`.absolute(Double)` / `.delta("+10")` —— 自定义 init(from:) 支持双形态 |
 | `Popup` | type ("success"/"error") + message |
 | `EndState` | 课程结束 |
 
-### 4.13 [ViewModels/ScenarioRuntime.swift](VirtualOR/ViewModels/ScenarioRuntime.swift) — 状态机 VM
+### 4.13 [ViewModels/CourseRuntime.swift](VirtualOR/ViewModels/CourseRuntime.swift) — 状态机 VM
 
 `@MainActor @Observable`。Phase 1 已交付：
 
@@ -458,7 +458,7 @@ ImmersiveView `.task` 启两条：`background_music`（volume 0.5）+ `abnormal_
 | `pendingBranchParent: String?` | 处于 branch 选择阶段时的父 op id（三选一流程的"记录"靠这个守门）|
 | `log: [OperationLogEntry]` | 操作日志（opId / timestamp / stateId）|
 | `isCourseEnded: Bool` | 进入 endState 后置 true，拒绝后续 perform |
-| `func start(scene:scenario:)` | 入口；进 first state |
+| `func start(scene:course:)` | 入口；进 first state |
 | `func perform(operationId:)` | 总分发；branch 守门 + popup 阻塞 + 日志 |
 | `func dismissPopup()` | popup 关闭后若有 `pendingTargetState` 再 transition |
 | 11 个 `triggerXxx()` extension | 给每个 operation 一个具名入口（jawThrust / propofolIV / muscleRelaxant 等），底层都走 `perform(operationId:)` |
@@ -517,8 +517,8 @@ APIConfig.baseURL ──┐
                                                    ▼
                                              APIError
 
-MockScenarioRepository.fetchScenario()  ──► Bundle resource.json ──► Scenario
-LiveScenarioRepository.fetchScenario()  ──► APIService.request   ──► Scenario（占位）
+MockCourseRepository.fetchCourse()  ──► Bundle resource.json ──► Course
+LiveCourseRepository.fetchCourse()  ──► APIService.request   ──► Course（占位）
 ```
 
 ### 5.2 [APIConfig.swift](VirtualOR/Networking/APIConfig.swift)
@@ -552,19 +552,19 @@ timeoutInterval = 30
 
 `LocalizedError`，5 个 case：`invalidURL` / `invalidResponse` / `httpError(statusCode, data)` / `decodingError(Error)` / `networkError(Error)`。
 
-### 5.6 [Services/Scenario/](VirtualOR/Services/Scenario) — 剧情数据访问（Repository：protocol + Live + Mock）
+### 5.6 [Services/Course/](VirtualOR/Services/Course) — 剧情数据访问（Repository：protocol + Live + Mock）
 
-剧情数据访问层（已从 `Networking/` 移到 `Services/Scenario/`）。命名用 Repository 与 `APIService`（HTTP 传输层）分层；Live 与 Mock 对称、共享接口、统一方法名 `fetchScenario()`：
+剧情数据访问层（已从 `Networking/` 移到 `Services/Course/`）。命名用 Repository 与 `APIService`（HTTP 传输层）分层；Live 与 Mock 对称、共享接口、统一方法名 `fetchCourse()`：
 
 | 文件 | 角色 |
 |---|---|
-| [ScenarioRepository.swift](VirtualOR/Services/Scenario/ScenarioRepository.swift) | `protocol ScenarioRepository: Sendable { func fetchScenario() async throws -> Scenario }` |
-| [LiveScenarioRepository.swift](VirtualOR/Services/Scenario/LiveScenarioRepository.swift) | Live：走 `APIService.request`，path 占位 `"/placeholder"`，待后端 ready |
-| [MockScenarioRepository.swift](VirtualOR/Services/Scenario/MockScenarioRepository.swift) | Mock：从主 bundle 的 [resource.json](VirtualOR/Resources/resource.json) 读取并解码；找不到抛 `APIError.invalidURL` |
+| [CourseRepository.swift](VirtualOR/Services/Course/CourseRepository.swift) | `protocol CourseRepository: Sendable { func fetchCourse() async throws -> Course }` |
+| [LiveCourseRepository.swift](VirtualOR/Services/Course/LiveCourseRepository.swift) | Live：走 `APIService.request`，path 占位 `"/placeholder"`，待后端 ready |
+| [MockCourseRepository.swift](VirtualOR/Services/Course/MockCourseRepository.swift) | Mock：从主 bundle 的 [resource.json](VirtualOR/Resources/resource.json) 读取并解码；找不到抛 `APIError.invalidURL` |
 
-> 原先内嵌的硬编码 `scenarioJSON` 字符串已删除，改为从 `Resources/resource.json` 加载（synchronized group 自动进 Copy Bundle Resources）。
+> 原先内嵌的硬编码 `courseJSON` 字符串已删除，改为从 `Resources/resource.json` 加载（synchronized group 自动进 Copy Bundle Resources）。
 
-**依赖注入**：`ORSceneViewModel(repository: ScenarioRepository = MockScenarioRepository())`，`loadScenarioIfNeeded()` 调 `repository.fetchScenario()`。后端 API ready 后构造时传 `LiveScenarioRepository()` 即可，调用点与 VM 内部零改动。
+**依赖注入**：`ORSceneViewModel(repository: CourseRepository = MockCourseRepository())`，`loadCourseIfNeeded()` 调 `repository.fetchCourse()`。后端 API ready 后构造时传 `LiveCourseRepository()` 即可，调用点与 VM 内部零改动。
 
 ---
 
@@ -585,8 +585,8 @@ loadingState: .idle → .loading → .loaded   (当前是空操作占位)
   ↓
 ImmersiveView 加载（make 闭包）：
   ├ loadRoomIfNeeded()                    异步加载 ORScene.usdz
-  ├ loadScenarioIfNeeded()                 scenarioService.fetchScenario（Mock 读 resource.json），初始 monitor 应用到 HUD
-  │   └ runtime.start(scene:scenario:)     transition(to: state1)，HUD 切到 state1.initial
+  ├ loadCourseIfNeeded()                 courseService.fetchCourse（Mock 读 resource.json），初始 monitor 应用到 HUD
+  │   └ runtime.start(scene:course:)     transition(to: state1)，HUD 切到 state1.initial
   ├ prepareForRoom()                       generateAllCollisionShapes + initiatePipeStatus
   ├ hudEntity 加 hudText attachment       (-0.40, -0.22, -0.5)
   └ videoEntity (子节点) 在 (0.42, -0.18, -0.5)；breathingVideo attachment 条件渲染
@@ -657,25 +657,25 @@ ContentView 重新显示按钮（state != .open 触发条件）
 | 吸引器展开/折叠 | ✅ | `isPipesExpanded` 状态机 + 幂等守卫 |
 | 器械拾取 | ✅ | 单组持有，切换时自动复位（含药品互斥） |
 | 头部跟踪 HUD | ✅ | 60 FPS 跟随，左下视野 |
-| mock 数据链路 | ✅ | resource.json → MockScenarioRepository.fetchScenario → ViewModel（注入）|
+| mock 数据链路 | ✅ | resource.json → MockCourseRepository.fetchCourse → ViewModel（注入）|
 | 实体→操作映射 (POP) | ✅ | OperationTrigger 协议 + 注册表；6 主操作已接，2 branch 占位 |
-| ScenarioRuntime Phase 1 | ✅ | state 切换、绝对值/delta、popup、targetState、log、branch 守门 |
-| ScenarioRuntime Phase 2 | ❌ | state1 退化插值、effect.duration boost、onNoOperation 超时、tick 循环 |
-| ScenarioRuntime Phase 3 | ⚠️ | autoVideo 已实现（10s → 浮窗），courseEnd 总结视图未做 |
+| CourseRuntime Phase 1 | ✅ | state 切换、绝对值/delta、popup、targetState、log、branch 守门 |
+| CourseRuntime Phase 2 | ❌ | state1 退化插值、effect.duration boost、onNoOperation 超时、tick 循环 |
+| CourseRuntime Phase 3 | ⚠️ | autoVideo 已实现（10s → 浮窗），courseEnd 总结视图未做 |
 | 音频循环 | ✅ | AudioService 多轨 + toggleSound |
 | 视频循环 + 浮窗化 | ✅ | BreathingVideoPlayer + AppModel.startVideoOverlay |
 | 麻醉监护仪按钮交互 | ⚠️ | `monitor_knob_001` 已接 increaseOxygen；其余 `Anes` 按钮未处理 |
 | 面罩佩戴/摘除 | ❌ | `masked` / `unmasked` 已定义，无交互逻辑 |
 | 监护仪屏幕生命体征显示 | ❌ | 当前只通过 HUD 文字显示，未投影到 3D 屏幕 |
 | 沉浸内 3D 退出按钮 | ❌ | 浮窗化后 2D 窗口被 dismiss，目前只能数字表冠退出 |
-| 真实后端接入 | ⚠️ | `LiveScenarioRepository.fetchScenario` 路径占位；`fetchInitialData` 占位 |
+| 真实后端接入 | ⚠️ | `LiveCourseRepository.fetchCourse` 路径占位；`fetchInitialData` 占位 |
 
 ### 7.2 待确认 / 历史遗留
 
 1. **`generateAllCollisionShapes` 中的占位 `ShapeResource`**
    所有可点击实体被赋予 `generateBox(size: .one)` 的 1×1×1 米碰撞盒，可能与实际几何不匹配（命中区域过大）。`loadRoomIfNeeded` 已调用过 `generateCollisionShapes(recursive: true)`，强制覆盖是否必要值得复审。
 
-2. **APIConfig 的占位 URL** — 上线前必须替换。`LiveScenarioRepository.fetchScenario` 的 `/placeholder` path 同样待定。
+2. **APIConfig 的占位 URL** — 上线前必须替换。`LiveCourseRepository.fetchCourse` 的 `/placeholder` path 同样待定。
 
 3. **OperationEntityMap 的占位实体名**
    branch 两个 touch 操作用 `TODO_intubation` / `TODO_bag_squeeze` 占位，资源里有真实实体后只改 `OperationEntityName`。仍缺实体的主操作：`maskBagVentilation`、`directIntubation`。
