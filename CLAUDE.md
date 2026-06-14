@@ -15,7 +15,7 @@
 
 - 新增 / 删除 / 重命名了文件或目录
 - 新增 / 删除了类、ViewModel、Service、enum
-- 改了状态机、实体命名约定（`CollidableEntities` / `Drawer` / `Anes` 等）
+- 改了状态机、实体命名约定（`CollidableEntities` / `Drawer` / `AnesMonitor` 等）
 - 改了网络层结构、Codable 模型形态
 - 改了关键的数据流（HUD 绑定、ScenarioRuntime 行为等）
 
@@ -44,7 +44,8 @@ xcodebuild -project /Users/geding/Documents/VirtualOR/VirtualOR.xcodeproj \
 | [VirtualOR/ViewModels/ScenarioRuntime.swift](VirtualOR/ViewModels/ScenarioRuntime.swift) | 状态机：state 切换 / op 执行 / popup / branch 守门 / log |
 | [VirtualOR/Models/ScenarioModel.swift](VirtualOR/Models/ScenarioModel.swift) | 后端 JSON 的 Codable struct（Scenario / Monitor / ValueChange 等） |
 | [VirtualOR/ViewModels/ORSceneViewModel.swift](VirtualOR/ViewModels/ORSceneViewModel.swift) | 3D 场景 + HUD vitals + drawer 拿药 / pipe / 拿东西 |
-| [VirtualOR/Models/ORSceneModel.swift](VirtualOR/Models/ORSceneModel.swift) | 实体命名 enum（`Drawer` / `Anes` / `Suction`）+ `CollidableEntities` + `DrugMap` |
+| [VirtualOR/Models/EntityName.swift](VirtualOR/Models/EntityName.swift) | 3D 实体名唯一注册处（`Suction` / `Drawer` / `AnesMonitor` / `OperationEntityName` / `SceneAsset`）|
+| [VirtualOR/Models/EntityGroups.swift](VirtualOR/Models/EntityGroups.swift) | 派生分组 `CollidableEntities` + `DrugMap` |
 | [VirtualOR/Views/ImmersiveView.swift](VirtualOR/Views/ImmersiveView.swift) | RealityKit 沉浸视图，连 viewModel + runtime + alert |
 
 更深的细节问 [project_structure.md](project_structure.md)

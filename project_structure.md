@@ -1,7 +1,7 @@
 # VirtualOR 项目结构文档
 
 > 最后同步：2026-06-14
-> 基于 commit：`a309afe docs: sync project_structure + CLAUDE.md to current state`（+ 未提交：实体名集中到 EntityName.swift）
+> 基于 commit：`dbbc968 docs: sync project_structure for EntityName + Scenario service split`（+ 未提交：命名合理化 —— ScenarioRepository / AnesMonitor / EntityGroups.swift）
 > 该文档反映当前代码库的实际状态，含标准 MVVM 分层目录、ScenarioRuntime 状态机、AudioService 多轨循环、BreathingVideoPlayer 浮窗化、resource.json mock 数据链路，以及 OperationEntityMap 的协议化（POP）实体→操作映射。
 
 ---
@@ -83,14 +83,14 @@ VirtualOR/
     │   ├── EntityName.swift                   # 3D 实体名唯一注册处（Suction/Drawer/Anes/OperationEntityName/SceneAsset）
     │   ├── ScenarioModel.swift                # 后端 JSON Codable struct
     │   ├── Monitor+Apply.swift                # MonitorChange 应用（absolute / delta）
-    │   ├── ORSceneModel.swift                 # 派生分组 CollidableEntities + DrugMap
+    │   ├── EntityGroups.swift                 # 派生分组 CollidableEntities + DrugMap
     │   └── OperationEntityMap.swift           # POP 实体名 → operationId 映射
     │
     ├── Services/                              # 领域服务 / 系统能力封装
-    │   ├── Scenario/                          # 剧情数据服务（protocol + Live + Mock）
-    │   │   ├── ScenarioServicing.swift        #   protocol：fetchScenario() async throws
-    │   │   ├── ScenarioService.swift          #   Live：走 APIService（占位 /placeholder）
-    │   │   └── MockScenarioService.swift      #   Mock：读 bundle resource.json
+    │   ├── Scenario/                          # 剧情数据访问（protocol + Live + Mock）
+    │   │   ├── ScenarioRepository.swift       #   protocol：fetchScenario() async throws
+    │   │   ├── LiveScenarioRepository.swift   #   Live：走 APIService（占位 /placeholder）
+    │   │   └── MockScenarioRepository.swift   #   Mock：读 bundle resource.json
     │   ├── AudioService.swift                 # 多轨循环音 + 总开关
     │   ├── BreathingVideoPlayer.swift         # AVPlayerLooper 无缝循环视频
     │   └── HeadTrackingManager.swift          # 头部位姿跟踪
@@ -102,7 +102,7 @@ VirtualOR/
     │   └── APIService.swift
     │
     ├── Resources/
-    │   ├── resource.json                      # mock 剧情数据（ScenarioService 从 bundle 读取）
+    │   ├── resource.json                      # mock 剧情数据（MockScenarioRepository 从 bundle 读取）
     │   ├── Audio/
     │   │   ├── abnormal_breath.m4a            # 呼吸困难循环音
     │   │   └── background_music.m4a           # 背景音乐循环
@@ -152,7 +152,7 @@ VirtualOR/
 │                              │  └────────────┘ └────────────────┘│
 ├─────────────────────────────┴────────────────────────────────────┤
 │                       Services / Networking Layer                 │
-│  ORSceneViewModel → scenarioService.fetchScenario()  (注入)        │
+│  ORSceneViewModel → repository.fetchScenario()  (注入)             │
 │   Mock → Bundle resource.json → JSONDecoder → Scenario            │
 │   Live → APIService.request → Scenario（占位 /placeholder）        │
 └──────────────────────────────────────────────────────────────────┘
@@ -164,7 +164,7 @@ VirtualOR/
 - **`AppModel` 管全局**；`ORSceneViewModel` 管 3D 场景与 HUD vitals；`ScenarioRuntime` 管临床状态机；视图层（`ContentView` / `ImmersiveView`）保持薄。
 - **`@Observable` + `@MainActor`**：所有 ViewModel / Service 用 `@Observable` 宏，跑在 `@MainActor`。
 - **Environment 注入**：`AppModel` 通过 `.environment(appModel)` 注入；视图通过 `@Environment(AppModel.self)` 取。
-- **Service 类**：`AudioService` / `BreathingVideoPlayer` / `ScenarioService` / `HeadTrackingManager` 各管一个独立领域。
+- **Service / Repository 类**：`AudioService` / `BreathingVideoPlayer` / `HeadTrackingManager` 封装系统能力；`ScenarioRepository`（Live/Mock）封装剧情数据访问。
 - **Weak 注入**：`ORSceneViewModel.runtime` 是 `weak var`（避免环），由 `ImmersiveView` 在 start 时回填。
 - **Swift Package 化资源**：3D 资源独立成 `RealityKitContent` 包；音视频 / mock JSON 放主 bundle 的 `Resources/`。
 - **POP 映射**：`OperationEntityMap` 用 `OperationTrigger` 协议把"点击实体 → operationId"统一抽象，可扩展（见 §4.16）。
@@ -274,7 +274,7 @@ VirtualOR/
 > 里的实体名只动这一个文件，全工程其它地方都通过 rawValue 引用，不出现裸字符串
 > （`handleTapGesture` 的吸引器分支已用 `Suction(rawValue:)`、场景加载用 `SceneAsset.orScene`）。
 >
-> [Models/ORSceneModel.swift](VirtualOR/Models/ORSceneModel.swift) 现在只放**派生**的实体分组
+> [Models/EntityGroups.swift](VirtualOR/Models/EntityGroups.swift) 现在只放**派生**的实体分组
 > `CollidableEntities` 与抽屉→药品映射 `DrugMap`（都引用上面的枚举）。
 
 下面列出各枚举内容（定义位于 EntityName.swift）。
@@ -304,7 +304,7 @@ VirtualOR/
 | 喉罩 (`laryngealMask1~4`) | 4 | `mask_00x` |
 | 喉管 (`laryngealDuct1~5`) | 5 | `duct_00x` |
 
-#### 4.6.3 `enum Anes`（麻醉监护仪）
+#### 4.6.3 `enum AnesMonitor`（麻醉监护仪）
 
 | Case | rawValue | 说明 |
 |------|----------|------|
@@ -517,8 +517,8 @@ APIConfig.baseURL ──┐
                                                    ▼
                                              APIError
 
-MockScenarioService.fetchScenario()  ──► Bundle resource.json ──► Scenario
-ScenarioService.fetchScenario()      ──► APIService.request   ──► Scenario（占位）
+MockScenarioRepository.fetchScenario()  ──► Bundle resource.json ──► Scenario
+LiveScenarioRepository.fetchScenario()  ──► APIService.request   ──► Scenario（占位）
 ```
 
 ### 5.2 [APIConfig.swift](VirtualOR/Networking/APIConfig.swift)
@@ -552,19 +552,19 @@ timeoutInterval = 30
 
 `LocalizedError`，5 个 case：`invalidURL` / `invalidResponse` / `httpError(statusCode, data)` / `decodingError(Error)` / `networkError(Error)`。
 
-### 5.6 [Services/Scenario/](VirtualOR/Services/Scenario) — 剧情数据服务（protocol + Live + Mock）
+### 5.6 [Services/Scenario/](VirtualOR/Services/Scenario) — 剧情数据访问（Repository：protocol + Live + Mock）
 
-剧情数据服务（已从 `Networking/` 移到 `Services/Scenario/`，属领域数据访问层）。协议化后 Live 与 Mock 共享同一接口、统一方法名 `fetchScenario()`：
+剧情数据访问层（已从 `Networking/` 移到 `Services/Scenario/`）。命名用 Repository 与 `APIService`（HTTP 传输层）分层；Live 与 Mock 对称、共享接口、统一方法名 `fetchScenario()`：
 
 | 文件 | 角色 |
 |---|---|
-| [ScenarioServicing.swift](VirtualOR/Services/Scenario/ScenarioServicing.swift) | `protocol ScenarioServicing: Sendable { func fetchScenario() async throws -> Scenario }` |
-| [ScenarioService.swift](VirtualOR/Services/Scenario/ScenarioService.swift) | Live：走 `APIService.request`，path 占位 `"/placeholder"`，待后端 ready |
-| [MockScenarioService.swift](VirtualOR/Services/Scenario/MockScenarioService.swift) | Mock：从主 bundle 的 [resource.json](VirtualOR/Resources/resource.json) 读取并解码；找不到抛 `APIError.invalidURL` |
+| [ScenarioRepository.swift](VirtualOR/Services/Scenario/ScenarioRepository.swift) | `protocol ScenarioRepository: Sendable { func fetchScenario() async throws -> Scenario }` |
+| [LiveScenarioRepository.swift](VirtualOR/Services/Scenario/LiveScenarioRepository.swift) | Live：走 `APIService.request`，path 占位 `"/placeholder"`，待后端 ready |
+| [MockScenarioRepository.swift](VirtualOR/Services/Scenario/MockScenarioRepository.swift) | Mock：从主 bundle 的 [resource.json](VirtualOR/Resources/resource.json) 读取并解码；找不到抛 `APIError.invalidURL` |
 
 > 原先内嵌的硬编码 `scenarioJSON` 字符串已删除，改为从 `Resources/resource.json` 加载（synchronized group 自动进 Copy Bundle Resources）。
 
-**依赖注入**：`ORSceneViewModel(scenarioService: ScenarioServicing = MockScenarioService())`，`loadScenarioIfNeeded()` 调 `scenarioService.fetchScenario()`。后端 API ready 后构造时传 `ScenarioService()` 即可，调用点与 VM 内部零改动。
+**依赖注入**：`ORSceneViewModel(repository: ScenarioRepository = MockScenarioRepository())`，`loadScenarioIfNeeded()` 调 `repository.fetchScenario()`。后端 API ready 后构造时传 `LiveScenarioRepository()` 即可，调用点与 VM 内部零改动。
 
 ---
 
@@ -657,7 +657,7 @@ ContentView 重新显示按钮（state != .open 触发条件）
 | 吸引器展开/折叠 | ✅ | `isPipesExpanded` 状态机 + 幂等守卫 |
 | 器械拾取 | ✅ | 单组持有，切换时自动复位（含药品互斥） |
 | 头部跟踪 HUD | ✅ | 60 FPS 跟随，左下视野 |
-| mock 数据链路 | ✅ | resource.json → MockScenarioService.fetchScenario → ViewModel（注入）|
+| mock 数据链路 | ✅ | resource.json → MockScenarioRepository.fetchScenario → ViewModel（注入）|
 | 实体→操作映射 (POP) | ✅ | OperationTrigger 协议 + 注册表；6 主操作已接，2 branch 占位 |
 | ScenarioRuntime Phase 1 | ✅ | state 切换、绝对值/delta、popup、targetState、log、branch 守门 |
 | ScenarioRuntime Phase 2 | ❌ | state1 退化插值、effect.duration boost、onNoOperation 超时、tick 循环 |
@@ -668,14 +668,14 @@ ContentView 重新显示按钮（state != .open 触发条件）
 | 面罩佩戴/摘除 | ❌ | `masked` / `unmasked` 已定义，无交互逻辑 |
 | 监护仪屏幕生命体征显示 | ❌ | 当前只通过 HUD 文字显示，未投影到 3D 屏幕 |
 | 沉浸内 3D 退出按钮 | ❌ | 浮窗化后 2D 窗口被 dismiss，目前只能数字表冠退出 |
-| 真实后端接入 | ⚠️ | `ScenarioService.fetchScenario` 路径占位；`fetchInitialData` 占位 |
+| 真实后端接入 | ⚠️ | `LiveScenarioRepository.fetchScenario` 路径占位；`fetchInitialData` 占位 |
 
 ### 7.2 待确认 / 历史遗留
 
 1. **`generateAllCollisionShapes` 中的占位 `ShapeResource`**
    所有可点击实体被赋予 `generateBox(size: .one)` 的 1×1×1 米碰撞盒，可能与实际几何不匹配（命中区域过大）。`loadRoomIfNeeded` 已调用过 `generateCollisionShapes(recursive: true)`，强制覆盖是否必要值得复审。
 
-2. **APIConfig 的占位 URL** — 上线前必须替换。`ScenarioService.fetchScenario` 的 `/placeholder` path 同样待定。
+2. **APIConfig 的占位 URL** — 上线前必须替换。`LiveScenarioRepository.fetchScenario` 的 `/placeholder` path 同样待定。
 
 3. **OperationEntityMap 的占位实体名**
    branch 两个 touch 操作用 `TODO_intubation` / `TODO_bag_squeeze` 占位，资源里有真实实体后只改 `OperationEntityName`。仍缺实体的主操作：`maskBagVentilation`、`directIntubation`。
