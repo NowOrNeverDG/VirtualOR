@@ -1,7 +1,7 @@
 # VirtualOR 项目结构文档
 
 > 最后同步：2026-06-14
-> 基于 commit：`3dbf2d0 Added mock json file`（+ 未提交的工作区改动：目录重组 / mock JSON 链路 / OperationEntityMap POP 化）
+> 基于 commit：`a309afe docs: sync project_structure + CLAUDE.md to current state`（+ 未提交：实体名集中到 EntityName.swift）
 > 该文档反映当前代码库的实际状态，含标准 MVVM 分层目录、ScenarioRuntime 状态机、AudioService 多轨循环、BreathingVideoPlayer 浮窗化、resource.json mock 数据链路，以及 OperationEntityMap 的协议化（POP）实体→操作映射。
 
 ---
@@ -80,13 +80,17 @@ VirtualOR/
     │   └── ScenarioRuntime.swift              # 临床状态机 VM（state 切换 / op / popup / log）
     │
     ├── Models/                                # 纯数据 / 领域模型 / 映射
+    │   ├── EntityName.swift                   # 3D 实体名唯一注册处（Suction/Drawer/Anes/OperationEntityName/SceneAsset）
     │   ├── ScenarioModel.swift                # 后端 JSON Codable struct
     │   ├── Monitor+Apply.swift                # MonitorChange 应用（absolute / delta）
-    │   ├── ORSceneModel.swift                 # 实体枚举 + 器械分组 + DrugMap
+    │   ├── ORSceneModel.swift                 # 派生分组 CollidableEntities + DrugMap
     │   └── OperationEntityMap.swift           # POP 实体名 → operationId 映射
     │
     ├── Services/                              # 领域服务 / 系统能力封装
-    │   ├── ScenarioService.swift              # 剧情数据服务（resource.json mock + 真实 API 占位）
+    │   ├── Scenario/                          # 剧情数据服务（protocol + Live + Mock）
+    │   │   ├── ScenarioServicing.swift        #   protocol：fetchScenario() async throws
+    │   │   ├── ScenarioService.swift          #   Live：走 APIService（占位 /placeholder）
+    │   │   └── MockScenarioService.swift      #   Mock：读 bundle resource.json
     │   ├── AudioService.swift                 # 多轨循环音 + 总开关
     │   ├── BreathingVideoPlayer.swift         # AVPlayerLooper 无缝循环视频
     │   └── HeadTrackingManager.swift          # 头部位姿跟踪
@@ -148,9 +152,9 @@ VirtualOR/
 │                              │  └────────────┘ └────────────────┘│
 ├─────────────────────────────┴────────────────────────────────────┤
 │                       Services / Networking Layer                 │
-│  ORSceneViewModel → ScenarioService.fetchMockScenario()           │
-│      → Bundle resource.json → JSONDecoder → Scenario              │
-│  （真实 API：ScenarioService.fetchScenario → APIService.request）  │
+│  ORSceneViewModel → scenarioService.fetchScenario()  (注入)        │
+│   Mock → Bundle resource.json → JSONDecoder → Scenario            │
+│   Live → APIService.request → Scenario（占位 /placeholder）        │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -263,9 +267,17 @@ VirtualOR/
 
 需要 `Info.plist` 中的 `NSWorldSensingUsageDescription` 授权（已配置）。
 
-### 4.6 [Models/ORSceneModel.swift](VirtualOR/Models/ORSceneModel.swift) — 领域模型
+### 4.6 实体名与领域模型
 
-将 Reality Composer Pro 中实体名抽象成 Swift 枚举，便于类型安全地引用。
+> **实体名集中化**：所有 3D 实体名枚举集中在 [Models/EntityName.swift](VirtualOR/Models/EntityName.swift)
+> —— `Suction` / `Drawer` / `Anes` / `OperationEntityName` / `SceneAsset`。改 Reality Composer Pro
+> 里的实体名只动这一个文件，全工程其它地方都通过 rawValue 引用，不出现裸字符串
+> （`handleTapGesture` 的吸引器分支已用 `Suction(rawValue:)`、场景加载用 `SceneAsset.orScene`）。
+>
+> [Models/ORSceneModel.swift](VirtualOR/Models/ORSceneModel.swift) 现在只放**派生**的实体分组
+> `CollidableEntities` 与抽屉→药品映射 `DrugMap`（都引用上面的枚举）。
+
+下面列出各枚举内容（定义位于 EntityName.swift）。
 
 #### 4.6.1 `enum Suction`（吸引器）
 
@@ -470,7 +482,6 @@ ImmersiveView `.task` 启两条：`background_music`（volume 0.5）+ `abnormal_
 | 类型 | 角色 |
 |---|---|
 | `protocol OperationTrigger` | `{ entityName; operationId }`——一个实体→操作绑定 |
-| `enum OperationEntityName: String` | 散装实体名集中处（`humanModel = "steve_001"`；branch 占位 `TODO_intubation` / `TODO_bag_squeeze`）；已有归属的复用 `Drawer` / `Anes` |
 | `enum StateOneOperationTrigger` | state1 的 6 个主操作绑定（遵守 `OperationTrigger`，`CaseIterable`）|
 | `enum MuscleRelaxantBranchTrigger` | muscleRelaxant 后 2 个 touch 分支（`intubation` / `onlyBag`）|
 | `enum OperationEntityMap` | `triggers: [any OperationTrigger]` 汇总全部绑定；`operationId(for:) -> String?` 反查 |
@@ -506,7 +517,7 @@ APIConfig.baseURL ──┐
                                                    ▼
                                              APIError
 
-ScenarioService.fetchMockScenario()  ──► Bundle resource.json ──► Scenario
+MockScenarioService.fetchScenario()  ──► Bundle resource.json ──► Scenario
 ScenarioService.fetchScenario()      ──► APIService.request   ──► Scenario（占位）
 ```
 
@@ -541,16 +552,19 @@ timeoutInterval = 30
 
 `LocalizedError`，5 个 case：`invalidURL` / `invalidResponse` / `httpError(statusCode, data)` / `decodingError(Error)` / `networkError(Error)`。
 
-### 5.6 [ScenarioService.swift](VirtualOR/Services/ScenarioService.swift)
+### 5.6 [Services/Scenario/](VirtualOR/Services/Scenario) — 剧情数据服务（protocol + Live + Mock）
 
-剧情数据服务（已从 `Networking/` 移到 `Services/`，属领域数据访问层）。两个静态方法：
+剧情数据服务（已从 `Networking/` 移到 `Services/Scenario/`，属领域数据访问层）。协议化后 Live 与 Mock 共享同一接口、统一方法名 `fetchScenario()`：
 
-- `fetchScenario() async throws -> Scenario` — 走 `APIService` 拉取真实数据；当前 path 是 `"/placeholder"`，待后端 API ready 后替换。
-- `fetchMockScenario() async throws -> Scenario` — **从主 bundle 的 [resource.json](VirtualOR/Resources/resource.json) 读取并解码**（麻醉气道管理课程），开发联调期用。找不到文件抛 `APIError.invalidURL` 并打 error 日志。
+| 文件 | 角色 |
+|---|---|
+| [ScenarioServicing.swift](VirtualOR/Services/Scenario/ScenarioServicing.swift) | `protocol ScenarioServicing: Sendable { func fetchScenario() async throws -> Scenario }` |
+| [ScenarioService.swift](VirtualOR/Services/Scenario/ScenarioService.swift) | Live：走 `APIService.request`，path 占位 `"/placeholder"`，待后端 ready |
+| [MockScenarioService.swift](VirtualOR/Services/Scenario/MockScenarioService.swift) | Mock：从主 bundle 的 [resource.json](VirtualOR/Resources/resource.json) 读取并解码；找不到抛 `APIError.invalidURL` |
 
 > 原先内嵌的硬编码 `scenarioJSON` 字符串已删除，改为从 `Resources/resource.json` 加载（synchronized group 自动进 Copy Bundle Resources）。
 
-`ORSceneViewModel.loadScenarioIfNeeded()` 当前调用 `fetchMockScenario()`，API ready 后只需切到 `fetchScenario()`，签名一致。
+**依赖注入**：`ORSceneViewModel(scenarioService: ScenarioServicing = MockScenarioService())`，`loadScenarioIfNeeded()` 调 `scenarioService.fetchScenario()`。后端 API ready 后构造时传 `ScenarioService()` 即可，调用点与 VM 内部零改动。
 
 ---
 
@@ -571,7 +585,7 @@ loadingState: .idle → .loading → .loaded   (当前是空操作占位)
   ↓
 ImmersiveView 加载（make 闭包）：
   ├ loadRoomIfNeeded()                    异步加载 ORScene.usdz
-  ├ loadScenarioIfNeeded()                 fetchMockScenario（读 resource.json），初始 monitor 应用到 HUD
+  ├ loadScenarioIfNeeded()                 scenarioService.fetchScenario（Mock 读 resource.json），初始 monitor 应用到 HUD
   │   └ runtime.start(scene:scenario:)     transition(to: state1)，HUD 切到 state1.initial
   ├ prepareForRoom()                       generateAllCollisionShapes + initiatePipeStatus
   ├ hudEntity 加 hudText attachment       (-0.40, -0.22, -0.5)
@@ -643,7 +657,7 @@ ContentView 重新显示按钮（state != .open 触发条件）
 | 吸引器展开/折叠 | ✅ | `isPipesExpanded` 状态机 + 幂等守卫 |
 | 器械拾取 | ✅ | 单组持有，切换时自动复位（含药品互斥） |
 | 头部跟踪 HUD | ✅ | 60 FPS 跟随，左下视野 |
-| mock 数据链路 | ✅ | resource.json → ScenarioService.fetchMockScenario → ViewModel |
+| mock 数据链路 | ✅ | resource.json → MockScenarioService.fetchScenario → ViewModel（注入）|
 | 实体→操作映射 (POP) | ✅ | OperationTrigger 协议 + 注册表；6 主操作已接，2 branch 占位 |
 | ScenarioRuntime Phase 1 | ✅ | state 切换、绝对值/delta、popup、targetState、log、branch 守门 |
 | ScenarioRuntime Phase 2 | ❌ | state1 退化插值、effect.duration boost、onNoOperation 超时、tick 循环 |
