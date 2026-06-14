@@ -9,8 +9,7 @@
 //  OperationTrigger 的类型并 append 到 triggers，路由逻辑（handleTapGesture →
 //  runtime.perform）完全不用改。
 //
-//  散装实体名集中在 OperationEntityName，已有归属的复用 Drawer / Anes，
-//  占位名后续替换只改 entityName 一处。
+//  实体名（含 OperationEntityName 占位）集中在 EntityName.swift；本文件只做映射逻辑。
 //
 
 import Foundation
@@ -21,17 +20,6 @@ protocol OperationTrigger {
     var entityName: String { get }
     /// 对应的 ScenarioOperation.id（state1 主操作或 branch 子操作）
     var operationId: String { get }
-}
-
-/// 触发剧情 operation 的散装实体名（Drawer / Anes 已有归属的不在此列）。
-/// 集中放一起，占位名后续替换只改这里。
-enum OperationEntityName: String {
-    case humanModel = "steve_001"               // 人体模型：托下颌
-
-    // —— muscleRelaxant 之后 branch 三选一里「靠点击触发」的实体（占位，待补真实名）——
-    case intubationTool = "TODO_intubation"     // 气管插管
-    case bagDevice      = "TODO_bag_squeeze"    // 仅手捏球囊通气
-    // noActionAfterRelaxant 是「肌松后不作为」的超时路径，无点击实体，故不收录
 }
 
 /// state1 主操作的可点实体绑定。

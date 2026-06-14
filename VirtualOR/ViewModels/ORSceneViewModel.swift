@@ -84,7 +84,7 @@ class ORSceneViewModel {
         if rootEntity != nil { return rootEntity }
 
         do {
-            self.rootEntity = try await Entity(named: "ORScene", in: realityKitContentBundle)
+            self.rootEntity = try await Entity(named: SceneAsset.orScene, in: realityKitContentBundle)
             self.rootEntity?.generateCollisionShapes(recursive: true)
             return rootEntity
         } catch {
@@ -118,30 +118,34 @@ class ORSceneViewModel {
         let chain = ancestorChain(of: entity)
         logger.info("[Tap] hit=\"\(name)\" chain=\(chain)")
 
-        switch name {
-        case "bent_pipe":
-            logger.info("[Tap] → expandPipes")
-            expandPipes()
-        case "pipe_1", "pipe_2", "pipe_connection":
-            logger.info("[Tap] → collapsePipes")
-            collapsePipes()
-        default:
-            // 抽屉：不再 3D 滑出，命中 DrugMap 就直接拿药（holdingItem 切到该药品）
-            if CollidableEntities.drawer.contains(name),
-               let drugName = DrugMap.drawerToDisplayName[name] {
-                logger.info("[Tap] → pickUpDrug from drawer \(name)")
-                pickUpDrug(displayName: drugName)
+        // 吸引器：bent_pipe 展开，其余三段折叠
+        if let suction = Suction(rawValue: name) {
+            switch suction {
+            case .bentPipe:
+                logger.info("[Tap] → expandPipes")
+                expandPipes()
+            case .pipeRollUpTop, .pipeRollUpBottom, .pipeConnection:
+                logger.info("[Tap] → collapsePipes")
+                collapsePipes()
             }
+            return
+        }
 
-            if let opId = OperationEntityMap.operationId(for: name) {
-                logger.info("[Tap] → runtime.perform(\(opId))")
-                runtime?.perform(operationId: opId)
-            } else if CollidableEntities.pickableInstruments.contains(name) {
-                logger.info("[Tap] → pickUpInstrument")
-                pickUpInstrument(entity)
-            } else {
-                logger.warning("[Tap] no handler matched for \"\(name)\". CollidableEntities.drawer=\(CollidableEntities.drawer)")
-            }
+        // 抽屉：不再 3D 滑出，命中 DrugMap 就直接拿药（holdingItem 切到该药品）
+        if CollidableEntities.drawer.contains(name),
+           let drugName = DrugMap.drawerToDisplayName[name] {
+            logger.info("[Tap] → pickUpDrug from drawer \(name)")
+            pickUpDrug(displayName: drugName)
+        }
+
+        if let opId = OperationEntityMap.operationId(for: name) {
+            logger.info("[Tap] → runtime.perform(\(opId))")
+            runtime?.perform(operationId: opId)
+        } else if CollidableEntities.pickableInstruments.contains(name) {
+            logger.info("[Tap] → pickUpInstrument")
+            pickUpInstrument(entity)
+        } else {
+            logger.warning("[Tap] no handler matched for \"\(name)\". CollidableEntities.drawer=\(CollidableEntities.drawer)")
         }
     }
 
