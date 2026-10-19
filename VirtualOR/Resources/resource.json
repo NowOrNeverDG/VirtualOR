@@ -141,6 +141,7 @@
               "id": "onlyBagAfterRelaxant",
               "name": "仅手捏球囊通气（状态4）",
               "effect": {
+                "duration": 30,
                 "monitorChange": {
                   "NIBP": {
                     "systolic": 98,
@@ -152,8 +153,12 @@
                   "temperature": 36.8
                 }
               },
-              "targetState": "state4",
-              "nextStep": "生命体征恢复正常，持续运行至10分钟结束"
+              "popup": {
+                "type": "success",
+                "message": "患者生命体征恢复正常，此次课程结束"
+              },
+              "targetState": "end",
+              "nextStep": "生命体征恢复正常，此次课程结束"
             },
             {
               "id": "intubationAfterRelaxant",
