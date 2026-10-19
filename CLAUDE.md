@@ -26,12 +26,12 @@
 
 ## 3. 构建命令
 
-visionOS 26.4.1 模拟器 id：`FB652FE1-8226-4191-94BA-B378EE01059C`
+visionOS 26.5 模拟器 id：`DFCEDCAD-4CAB-4F21-9E47-5E6847A2ED76`（原 26.4.1 那台已不存在，`xcrun simctl list` 核对过）
 
 ```
 xcodebuild -project /Users/geding/Documents/VirtualOR/VirtualOR.xcodeproj \
   -scheme VirtualOR \
-  -destination 'platform=visionOS Simulator,id=FB652FE1-8226-4191-94BA-B378EE01059C' \
+  -destination 'platform=visionOS Simulator,id=DFCEDCAD-4CAB-4F21-9E47-5E6847A2ED76' \
   build 2>&1 | tail -5
 ```
 
