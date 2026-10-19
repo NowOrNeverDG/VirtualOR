@@ -8,7 +8,7 @@
 //  - Suction              吸引器（展开 pipe_1/2/connection、卷起 bent_pipe）
 //  - Drawer               5 个抽屉本体 + 抽屉内各类器械部件
 //  - AnesMonitor          麻醉监护仪按钮 / 屏幕 / 面罩相关
-//  - OperationEntityName   散装的操作触发实体（人体模型 / branch 占位）
+//  - OperationEntityName   散装的操作触发实体（人体模型 / 人体衣服）
 //  - SceneAsset           RealityKitContent 里的场景资源名
 //
 //  派生的分组与映射（CollidableEntities / DrugMap）见 ORSceneModel.swift；
@@ -25,8 +25,8 @@ enum Suction: String {
 }
 
 enum Drawer: String {
-    case drawer1 = "drawer_1"
-    case drawer2 = "drawer_2"
+    case drawer1 = "drawer_001"
+    case drawer2 = "drawer_002"
     case drawer3 = "drawer_003"
     case drawer4 = "drawer_004"
     case drawer5 = "drawer_005"
@@ -87,16 +87,15 @@ enum AnesMonitor: String {
     case unmaskedPart2 = "face_shield_monitor_002"
     case unmaskedPart3 = "face_shield_monitor_003"
     case unmaskedPart4 = "face_shield_monitor_004"
+    case rubberBall = "monitor_rubber_ball"     // 球囊：手持肌松药点击 → 仅捏球囊通气
 }
 
 /// 触发剧情 operation 的散装实体名（Drawer / AnesMonitor 已有归属的不在此列）。
 enum OperationEntityName: String {
-    case humanModel = "steve_001"               // 人体模型：托下颌
-
-    // —— muscleRelaxant 之后 branch 三选一里「靠点击触发」的实体（占位，待补真实名）——
-    case intubationTool = "TODO_intubation"     // 气管插管
-    case bagDevice      = "TODO_bag_squeeze"    // 仅手捏球囊通气
+    case humanModel = "steve_001"                 // 人体模型：托下颌
+    case patientClothes = "steve_clothes_002"     // 人体衣服：手持药品点击 → 服用
     // noActionAfterRelaxant 是「肌松后不作为」的超时路径，无点击实体，故不收录
+    // intubation / onlyBag 两个 branch 触发靠已有实体：anesUnmasked 组 / rubberBall（见 ORSceneViewModel）
 }
 
 /// RealityKitContent 包里的场景资源名。

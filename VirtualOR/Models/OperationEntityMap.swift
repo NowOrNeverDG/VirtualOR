@@ -22,23 +22,20 @@ protocol OperationTrigger {
     var operationId: String { get }
 }
 
-/// state1 主操作的可点实体绑定。
+/// state1 主操作的可点实体绑定（点击即触发，无前置条件）。
+/// 有前置条件的操作不在此列，由 ORSceneViewModel 守门后调 runtime：
+///   - 四种药（propofolIV / noEffectDrugs / antagonistDrugs / muscleRelaxant）：
+///     抽屉拿药只是持有，手持药品点人体衣服（steve_clothes_002）才"服用"触发（DrugMap）
+///   - maskBagVentilation / onlyBagAfterRelaxant：点球囊（monitor_rubber_ball），按肌松药是否已服用分流
+///   - intubationAfterRelaxant / directIntubation：手持喉镜 + 气管导管点人体（steve_001），按肌松药是否已服用分流
 enum StateOneOperationTrigger: CaseIterable, OperationTrigger {
     case jawThrust
     case increaseOxygen
-    case propofolIV
-    case noEffectDrugs
-    case antagonistDrugs
-    case muscleRelaxant
 
     var operationId: String {
         switch self {
         case .jawThrust:        "jawThrust"
         case .increaseOxygen:   "increaseOxygen"
-        case .propofolIV:       "propofolIV"
-        case .noEffectDrugs:    "noEffectDrugs"
-        case .antagonistDrugs:  "antagonistDrugs"
-        case .muscleRelaxant:   "muscleRelaxant"
         }
     }
 
@@ -46,33 +43,6 @@ enum StateOneOperationTrigger: CaseIterable, OperationTrigger {
         switch self {
         case .jawThrust:        OperationEntityName.humanModel.rawValue   // steve_001
         case .increaseOxygen:   AnesMonitor.autoButton.rawValue           // monitor_knob_001
-        case .propofolIV:       Drawer.drawer2.rawValue                   // drawer_2     → Propofol
-        case .noEffectDrugs:    Drawer.drawer3.rawValue                   // drawer_003   → Salbutamol
-        case .antagonistDrugs:  Drawer.drawer4.rawValue                   // drawer_004   → 氟马西尼/纳洛酮
-        case .muscleRelaxant:   Drawer.drawer5.rawValue                   // drawer_005   → 肌松药
-        }
-    }
-}
-
-/// muscleRelaxant 之后 branch 三选一里「靠点击实体触发」的两个选项。
-/// runtime 在点过 muscleRelaxant 后进入 branch 守门（pendingBranchParent），
-/// 此时点击这两个实体之一即被解析为对应 branch 子操作 → 决定走 state4 / end。
-/// （第三个 noActionAfterRelaxant 是不作为超时，无点击实体。）
-enum MuscleRelaxantBranchTrigger: CaseIterable, OperationTrigger {
-    case intubation   // 气管插管（含球囊）→ 成功弹窗 → 课程结束
-    case onlyBag      // 仅手捏球囊通气     → state4（生命体征恢复）
-
-    var operationId: String {
-        switch self {
-        case .intubation:  "intubationAfterRelaxant"
-        case .onlyBag:     "onlyBagAfterRelaxant"
-        }
-    }
-
-    var entityName: String {
-        switch self {
-        case .intubation:  OperationEntityName.intubationTool.rawValue
-        case .onlyBag:     OperationEntityName.bagDevice.rawValue
         }
     }
 }
@@ -81,8 +51,7 @@ enum OperationEntityMap {
     /// 所有「实体 → operation」绑定的唯一来源。
     /// 接新操作：新增遵守 OperationTrigger 的类型，map 成 existential 后并进来。
     static let triggers: [any OperationTrigger] =
-        StateOneOperationTrigger.allCases.map { $0 as any OperationTrigger } +
-        MuscleRelaxantBranchTrigger.allCases.map { $0 as any OperationTrigger }
+        StateOneOperationTrigger.allCases.map { $0 as any OperationTrigger }
 
     /// 反查：被点实体名 → operationId（无绑定返回 nil）。
     static func operationId(for entityName: String) -> String? {
