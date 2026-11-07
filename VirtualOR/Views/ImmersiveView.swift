@@ -39,9 +39,16 @@ struct ImmersiveView: View {
     @State private var drugMenuAutoHideTask: Task<Void, Never>?
 
     /// 托盘与抽屉局部 Y 轴正向边缘的间距（米）。
-    private static let drugMenuDrawerClearance: Float = 0.25
+    private static let drugMenuDrawerClearance: Float = 0.35
     /// 打开后这么久没选药就自动收起（两级菜单要翻类别，给宽一点）
     private static let drugMenuAutoHideDelay: Duration = .seconds(20)
+
+    private func removeScreenGeometry(from entity: Entity) {
+        entity.components.remove(ModelComponent.self)
+        for child in entity.children {
+            removeScreenGeometry(from: child)
+        }
+    }
 
     var body: some View {
         RealityView { content, attachments in
@@ -68,15 +75,30 @@ struct ImmersiveView: View {
             // Add HUD entity (will track head position)
             content.add(hudEntity)
 
-            // Attach the SwiftUI HUD text to the entity
-            if let hudAttachment = attachments.entity(for: "hudText") {
-                // Lower-left of field of view:
-                //   x ↑ 越靠右；y ↓ 越靠下；z ↓ 越远
-                hudAttachment.position = SIMD3<Float>(-0.40, -0.22, -0.5)
-                hudEntity.addChild(hudAttachment)
+            // monitor_submain_image uses local X/Y for width/height.
+            // Its mesh normal includes a small tilt relative to the local XY plane.
+            if let monitor = rootEntity.findEntity(named: "monitor_submain_image"),
+               let hudAttachment = attachments.entity(for: "hudText") {
+                let screenBounds = monitor.visualBounds(relativeTo: monitor)
+                let hudBounds = hudAttachment.visualBounds(relativeTo: hudAttachment)
+                if hudBounds.extents.x > 0, hudBounds.extents.y > 0 {
+                    let fit = min(screenBounds.extents.x * 0.85 / hudBounds.extents.x,
+                                  screenBounds.extents.y * 0.85 / hudBounds.extents.y)
+                    // Normal measured from the ORScene.usdz screen mesh.
+                    let screenNormal = simd_normalize(SIMD3<Float>(-0.004836739, 0, 0.99998826))
+                    hudAttachment.orientation = simd_quatf(from: SIMD3<Float>(0, 0, 1), to: screenNormal)
+                    hudAttachment.scale = SIMD3<Float>(repeating: fit)
+                    let surfaceCenter = screenBounds.center
+                        + screenNormal * screenBounds.extents.x * 0.005
+                    hudAttachment.position = surfaceCenter
+                        - hudAttachment.orientation.act(hudBounds.center * fit)
+                    // Preserve the anchor; remove the image before adding HUD geometry.
+                    removeScreenGeometry(from: monitor)
+                    monitor.addChild(hudAttachment)
+                }
             }
 
-            // 手持物：视野正中偏下，和左下角生命体征分开
+            // 手持物：视野正中偏下，与监护仪上的生命体征分开
             if let holdingAttachment = attachments.entity(for: "holdingItem") {
                 holdingAttachment.position = SIMD3<Float>(0, -0.22, -0.5)
                 hudEntity.addChild(holdingAttachment)
@@ -93,12 +115,6 @@ struct ImmersiveView: View {
             videoEntity.position = videoFloatPos
             if let videoAttachment = attachments.entity(for: "breathingVideo") {
                 videoEntity.addChild(videoAttachment)
-            }
-
-            // 进场引导：视野正中，10s 后随视频浮窗化消失
-            if let introAttachment = attachments.entity(for: "courseIntro") {
-                introAttachment.position = SIMD3<Float>(0, 0, -0.6)
-                hudEntity.addChild(introAttachment)
             }
 
             // 剧情弹窗：跟随头部、视野正中。沉浸空间里 .alert 没有可挂载的窗口
@@ -136,28 +152,21 @@ struct ImmersiveView: View {
             }
         } attachments: {
             Attachment(id: "hudText") {
-                // 生命体征：考核模式才显示——教学模式靠高亮 + 提示学操作，
-                // 体征和时间压力会分散注意力（这两项本身就是考核的一部分）。
-                if appModel.trainingMode == .assessment {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("NIBP: \(viewModel.nibpSystolic)/\(viewModel.nibpDiastolic) mmHg")
-                        Text("SPO2: \(viewModel.spo2)%")
-                        Text("HR: \(viewModel.hr) 次/分")
-                        Text("RR: \(viewModel.rr) 次/分")
-                        Text(String(format: "体温: %.1f℃", viewModel.temperature))
-                    }
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.black.opacity(0.6))
-                    .cornerRadius(8)
-                }
+                PatientMonitorView(
+                    heartRate: viewModel.hr,
+                    oxygenSaturation: viewModel.spo2,
+                    systolic: viewModel.nibpSystolic,
+                    diastolic: viewModel.nibpDiastolic,
+                    respiratoryRate: viewModel.rr,
+                    temperature: viewModel.temperature
+                )
             }
             Attachment(id: "holdingItem") {
-                if viewModel.holdingItem != "nothing" {
+                // Keep conditional attachments nonzero-sized when their content is hidden.
+                ZStack {
+                Group {
                     VStack(spacing: 2) {
-                        Text(viewModel.holdingItem)
+                        Text(viewModel.holdingItem == "nothing" ? "当前手持：无" : viewModel.holdingItem)
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(.white)
                         // 下一步提示只在教学模式给；考核模式只留系统的注视高亮
@@ -172,16 +181,24 @@ struct ImmersiveView: View {
                     .background(.black.opacity(0.6))
                     .cornerRadius(8)
                 }
+                }
+                .frame(minWidth: 1, minHeight: 1)
             }
             Attachment(id: "breathingVideo") {
-                // 同一路视频，只在考核模式渲染；教学模式不需要这个浮窗
-                if appModel.trainingMode == .assessment, appModel.isVideoFloated {
+                // Keep conditional attachments nonzero-sized when their content is hidden.
+                ZStack {
+                // 两种训练模式均在进场 10 秒后显示视频浮窗。
+                if appModel.isVideoFloated {
                     VideoPlayer(player: appModel.videoPlayer.player)
                         .frame(width: videoFloatSize.width, height: videoFloatSize.height)
                         .cornerRadius(12)
                 }
+                }
+                .frame(minWidth: 1, minHeight: 1)
             }
             Attachment(id: "countdown") {
+                // Keep conditional attachments nonzero-sized when their content is hidden.
+                ZStack {
                 // 倒计时同理：只在考核模式给时间压力，教学模式不限时
                 if appModel.trainingMode == .assessment {
                     Text(String(format: "%02d:%02d", runtime.remainingSeconds / 60, runtime.remainingSeconds % 60))
@@ -192,16 +209,12 @@ struct ImmersiveView: View {
                         .background(.black.opacity(0.6))
                         .cornerRadius(8)
                 }
-            }
-            Attachment(id: "courseIntro") {
-                // 视频浮窗化（10s）之前显示；剧情弹窗弹出时让位
-                if !appModel.isVideoFloated, runtime.activePopup == nil {
-                    CourseIntroView(showsInteractionGuide: appModel.trainingMode == .teaching)
-                        // 纯信息面板，不能挡住后面 3D 物体的点击
-                        .allowsHitTesting(false)
                 }
+                .frame(minWidth: 1, minHeight: 1)
             }
             Attachment(id: "coursePopup") {
+                // Keep conditional attachments nonzero-sized when their content is hidden.
+                ZStack {
                 if let popup = runtime.activePopup {
                     VStack(spacing: 14) {
                         Text(popup.type == "error" ? "错误" : "提示")
@@ -224,15 +237,23 @@ struct ImmersiveView: View {
                     .frame(width: 340)
                     .glassBackgroundEffect()
                 }
+                }
+                .frame(minWidth: 1, minHeight: 1)
             }
             Attachment(id: "drugMenu") {
+                // Keep conditional attachments nonzero-sized when their content is hidden.
+                ZStack {
                 if viewModel.isDrugMenuVisible {
                     DrugMenuView(language: viewModel.displayLanguage) { drug in
                         viewModel.pickUpDrugFromMenu(drug)
                     }
                 }
+                }
+                .frame(minWidth: 1, minHeight: 1)
             }
             Attachment(id: "descriptionBubble") {
+                // Keep conditional attachments nonzero-sized when their content is hidden.
+                ZStack {
                 // 教学模式点击气泡：内容和位置都由 viewModel.descriptionBubble 驱动，
                 // 位置的挂载在 update 闭包里（见上）。纯说明用，不拦截点击。
                 if let bubble = viewModel.descriptionBubble {
@@ -253,6 +274,8 @@ struct ImmersiveView: View {
                         }
                         .allowsHitTesting(false)
                 }
+                }
+                .frame(minWidth: 1, minHeight: 1)
             }
         }
         .gesture(TapGesture().targetedToAnyEntity().onEnded { value in
@@ -307,6 +330,8 @@ struct ImmersiveView: View {
             }
         }
         .onDisappear {
+            headTrackingManager.stop()
+            drugMenuAutoHideTask?.cancel()
             audioService.stopAll()
             appModel.stopVideoOverlay()
             // 退沉浸 → 重新打开 2D 主窗口（否则没有可见 scene，app 会退）

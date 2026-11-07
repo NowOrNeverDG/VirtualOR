@@ -21,12 +21,7 @@ struct ContentView: View {
             case .loaded:
                 VStack(spacing: 24) {
                     // 沉浸空间打开后、视频未浮窗化前 → 在 2D 窗口里播视频。
-                    // 只在考核模式显示：教学模式不需要这层病情视频提示。
-                    // 注：底层 appModel.startVideoOverlay() 仍照常跑（见 ImmersiveView），
-                    // 10s 后 isVideoFloated 翻转、dismissWindow("main") 的窗口管理逻辑两种模式一致，
-                    // 这里只是不渲染画面。
-                    if appModel.trainingMode == .assessment
-                        && appModel.immersiveSpaceState == .open && !appModel.isVideoFloated {
+                    if appModel.immersiveSpaceState == .open && !appModel.isVideoFloated {
                         VideoPlayer(player: appModel.videoPlayer.player)
                             .frame(width: 480, height: 320)
                             .cornerRadius(12)

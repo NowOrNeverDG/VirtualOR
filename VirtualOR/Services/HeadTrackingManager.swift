@@ -31,11 +31,17 @@ class HeadTrackingManager {
         }
     }
 
+    func stop() {
+        session.stop()
+        isRunning = false
+    }
+
     func queryDeviceAnchor() -> simd_float4x4? {
-        guard isRunning,
+        guard isRunning, worldTracking.state == .running,
               let anchor = worldTracking.queryDeviceAnchor(atTimestamp: CACurrentMediaTime()) else {
             return nil
         }
+        guard anchor.isTracked else { return nil }
         return anchor.originFromAnchorTransform
     }
 }
