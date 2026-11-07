@@ -1,8 +1,24 @@
 # VirtualOR 项目结构文档
 
-> 最后同步：2026-06-14
-> 基于 commit：`92efaae docs: sync naming rationalization (Repository / AnesMonitor / EntityGroups)`（+ 未提交：领域词 Scenario → Course 全量重命名）
+> 最后同步：2026-11-07
+> 基于 commit：`e081fbf feat: add categorized drug tray anchored to drawer`
 > 该文档反映当前代码库的实际状态，含标准 MVVM 分层目录、CourseRuntime 状态机、AudioService 多轨循环、BreathingVideoPlayer 浮窗化、resource.json mock 数据链路，以及 OperationEntityMap 的协议化（POP）实体→操作映射。
+
+
+## 当前代码更新（2026-11-07）
+
+以下条目覆盖本文后续历史章节中的旧描述：
+
+- 新增 `Views/DrugMenuView.swift`：6 类、16 种药品的两级菜单；类别环形排列，类别内列表选择。
+- `EntityGroups.swift` 中 `DrugCategory` 定义分类，`DrugMap.drugs` 为药品数据源；多个药品可映射同一个课程 operation。
+- `drawer_002～005` 点击切换托盘，`drawer_001` 保持点击穿透以便拾取器械。抽屉点击不再直接给药。
+- `ORSceneViewModel.drugMenuDrawerName` 记录所点抽屉；`ImmersiveView` 将托盘放在该实体局部 +Y 包围盒边缘外 0.25 米，转换到世界空间固定位置，朝向使用者。
+- 选药调用 `pickUpDrugFromMenu`，更新持有状态并关闭菜单；点击患者衣服才执行给药。托盘打开 20 秒后自动关闭，类别点击不重置计时。
+- 器械支持喉镜与气管导管组合持有；患者点击按持有组合分流托下颌或插管。球囊点击按肌松分支状态分流通气操作。
+- 教学/考核模式已实现：教学显示交互说明和下一步提示；考核显示体征 HUD、课程倒计时和视频。
+- CourseRuntime Phase 2 已实现：0.1 秒 tick、体征退化插值、操作效果渐变、状态超时；另有课程倒计时和 state3 结束兜底。
+- 主场景资源 `ORScene.usdz` 已更新；课程结束总结界面与真实后端仍待接入。
+
 
 ---
 
