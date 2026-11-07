@@ -27,6 +27,22 @@ struct ImmersiveView: View {
     private let videoFloatPos = SIMD3<Float>(0.42, -0.18, -0.5)
     private let videoFloatSize = CGSize(width: 220, height: 145)
 
+    // MARK: - 药品托盘
+    //
+    // 点药品抽屉（drawer_002~005）打开。原本设计是「亮掌心唤起」，但 visionOS 系统
+    // 已经占用了这个手势（看掌心会弹出系统的 Home 圆圈按钮，点了直接回主屏），
+    // 两者冲突，所以改成点抽屉——临床上也是从麻醉车里取药。
+    //
+    // 打开的瞬间把托盘摆在所点抽屉局部 Y 轴正方向，并冻结在世界坐标，之后转头不会
+    // 跟着跑。选中药品、再点一次抽屉、或若干秒无操作都会收起。
+    @State private var drugMenuEntity = Entity()
+    @State private var drugMenuAutoHideTask: Task<Void, Never>?
+
+    /// 托盘与抽屉局部 Y 轴正向边缘的间距（米）。
+    private static let drugMenuDrawerClearance: Float = 0.25
+    /// 打开后这么久没选药就自动收起（两级菜单要翻类别，给宽一点）
+    private static let drugMenuAutoHideDelay: Duration = .seconds(20)
+
     var body: some View {
         RealityView { content, attachments in
             // 语言 / 训练模式在进沉浸之前就选好了，这里带进 ViewModel：
@@ -99,6 +115,14 @@ struct ImmersiveView: View {
                 bubbleAttachment.components.set(BillboardComponent())
                 bubbleAttachment.isEnabled = false
                 rootEntity.addChild(bubbleAttachment)
+            }
+
+            // 药品托盘：挂在场景空间（不跟头），打开时由 .onChange 摆到抽屉前方。
+            // BillboardComponent 保证你走动后托盘仍然转向你。
+            content.add(drugMenuEntity)
+            if let drugMenuAttachment = attachments.entity(for: "drugMenu") {
+                drugMenuAttachment.components.set(BillboardComponent())
+                drugMenuEntity.addChild(drugMenuAttachment)
             }
         } update: { content, attachments in
             // 教学模式点击气泡：有内容就摆到目标位置显示，没有就隐藏
@@ -201,6 +225,13 @@ struct ImmersiveView: View {
                     .glassBackgroundEffect()
                 }
             }
+            Attachment(id: "drugMenu") {
+                if viewModel.isDrugMenuVisible {
+                    DrugMenuView(language: viewModel.displayLanguage) { drug in
+                        viewModel.pickUpDrugFromMenu(drug)
+                    }
+                }
+            }
             Attachment(id: "descriptionBubble") {
                 // 教学模式点击气泡：内容和位置都由 viewModel.descriptionBubble 驱动，
                 // 位置的挂载在 update 闭包里（见上）。纯说明用，不拦截点击。
@@ -243,6 +274,30 @@ struct ImmersiveView: View {
                     hudEntity.transform = Transform(matrix: headTransform)
                 }
                 try? await Task.sleep(for: .milliseconds(16))
+            }
+        }
+        .onChange(of: viewModel.isDrugMenuVisible) { _, isVisible in
+            drugMenuAutoHideTask?.cancel()
+            guard isVisible else { return }
+            guard let drawerName = viewModel.drugMenuDrawerName,
+                  let drawer = viewModel.rootEntity?.findEntity(named: drawerName) else {
+                viewModel.isDrugMenuVisible = false
+                return
+            }
+            // 沿抽屉局部 +Y 轴放置，不随使用者站位变化。
+            // 先把局部边缘转换到世界坐标，再加真实米数的间距，避免场景缩放影响。
+            let bounds = drawer.visualBounds(relativeTo: drawer)
+            let edge = SIMD3<Float>(bounds.center.x, bounds.max.y, bounds.center.z)
+            let worldEdge = drawer.convert(position: edge, to: nil)
+            let worldYAxis = simd_normalize(drawer.convert(direction: SIMD3<Float>(0, 1, 0), to: nil))
+            drugMenuEntity.setPosition(
+                worldEdge + worldYAxis * Self.drugMenuDrawerClearance,
+                relativeTo: nil
+            )
+            drugMenuAutoHideTask = Task {
+                try? await Task.sleep(for: Self.drugMenuAutoHideDelay)
+                guard !Task.isCancelled else { return }
+                viewModel.isDrugMenuVisible = false
             }
         }
         .onChange(of: appModel.isVideoFloated) { _, isFloated in

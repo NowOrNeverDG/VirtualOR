@@ -182,7 +182,7 @@
         },
         {
           "id": "noEffectDrugs",
-          "name": "使用沙丁胺醇/甲泼尼龙/地塞米松",
+          "name": "使用无效药物（干扰选项）",
           "effect": {
             "monitorChange": {}
           },

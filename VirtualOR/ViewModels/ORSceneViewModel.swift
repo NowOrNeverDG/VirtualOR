@@ -37,6 +37,11 @@ class ORSceneViewModel {
     private var currentHeldGroups: [CollidableEntities.InstrumentGroup] = []
     /// 当前手持的药品。药品没有 3D 模型，和器械互斥。
     private var heldDrug: DrugMap.Drug?
+    /// 药品托盘是否打开。点药品抽屉切换；选中药品后自动关闭。
+    /// 托盘摆在哪、多久自动收起由 ImmersiveView 负责（它有头部位姿）。
+    var isDrugMenuVisible: Bool = false
+    /// 本次打开托盘的抽屉，用于把托盘摆在抽屉前方。
+    private(set) var drugMenuDrawerName: String?
 
     /// 是否教学模式（由 ImmersiveView 从 AppModel 带进来，进场后不变）。
     /// 只影响点击气泡（见 ORSceneViewModel+DescriptionBubble）—— 考核模式点击不弹说明。
@@ -102,19 +107,30 @@ class ORSceneViewModel {
         temperature = monitor.temperature
     }
 
+    /// ORScene.usdz 声明 metersPerUnit = 1，但量出来的尺寸是真实物件的 ~10 倍
+    /// （病人模型躺平长 13.25、病床长 20.88、墙高 34.98，按真实米数算完全不合理）。
+    /// 3D 那边建模时的单位弄错了，真机上人显得比一个抽屉还矮一截就是这个原因。
+    /// 等 usdz 在源头改对尺寸后，这个系数要删掉——这里先按比例整体缩小兜底。
+    private static let sceneScaleCorrection: Float = 0.1
+
     @discardableResult
     func loadRoomIfNeeded() async -> Entity? {
         if rootEntity != nil { return rootEntity }
 
         do {
             self.rootEntity = try await Entity(named: SceneAsset.orScene, in: realityKitContentBundle)
+            self.rootEntity?.scale = SIMD3<Float>(repeating: Self.sceneScaleCorrection)
             self.rootEntity?.generateCollisionShapes(recursive: true)
+            if let rootEntity {
+                let fixed = raiseInvisibleGlassOpacity(in: rootEntity)
+                logger.info("[Material] 透明材质抬到最低可见度：\(fixed) 个")
+            }
             return rootEntity
         } catch {
             logger.error("Failed to load ORScene: \(error.localizedDescription)")
             self.loadError = error
         }
-        
+
         return nil
     }
     
@@ -165,14 +181,11 @@ class ORSceneViewModel {
             return
         }
 
-        // 抽屉：不再 3D 滑出，命中 DrugMap 就拿药（只是持有，服用要点人体衣服）
-        if CollidableEntities.drawer.contains(name) {
-            if let drug = DrugMap.drug(inDrawer: name) {
-                logger.info("[Tap] → pickUpDrug from drawer \(name)")
-                pickUpDrug(drug)
-            } else {
-                logger.info("[Tap] drawer \(name) 命中但 DrugMap 无此抽屉（drawer_001 属正常）")
-            }
+        // 药品抽屉：点任意一格开/关药品托盘，在托盘里选具体药
+        if CollidableEntities.drugDrawers.contains(name) {
+            drugMenuDrawerName = name
+            isDrugMenuVisible.toggle()
+            logger.info("[Tap] → drug menu \(self.isDrugMenuVisible ? "open" : "close")")
             return
         }
 
@@ -234,10 +247,11 @@ class ORSceneViewModel {
         return nil
     }
 
-    /// 实体名是否是任一 tap handler 的注册名。
+    /// 实体名是否是任一 tap handler 的注册名。drawer_001 不在这张表里——它是
+    /// 点击透明的（见 CollidableEntities.tapTransparent），射线打不到它。
     private func isKnownTapTarget(_ n: String) -> Bool {
         Suction(rawValue: n) != nil
-            || CollidableEntities.drawer.contains(n)
+            || CollidableEntities.drugDrawers.contains(n)
             || CollidableEntities.anesUnmasked.contains(n)
             || CollidableEntities.anesMasked.contains(n)
             || n == OperationEntityName.patientClothes.rawValue
@@ -263,7 +277,7 @@ class ORSceneViewModel {
     private func generateAllCollisionShapes() {
         makeEntitiesCollidable(CollidableEntities.suctionExpanded)
         makeEntitiesCollidable(CollidableEntities.suctionCollapsed)
-        makeEntitiesCollidable(CollidableEntities.drawer)
+        makeEntitiesCollidable(CollidableEntities.drugDrawers)
         makeEntitiesCollidable(CollidableEntities.anesAdjustButton)
         makeEntitiesCollidable([CollidableEntities.mainScreen, CollidableEntities.submainScreen])
         makeEntitiesCollidable(CollidableEntities.pickableInstruments)
@@ -275,7 +289,9 @@ class ORSceneViewModel {
             AnesMonitor.rubberBall.rawValue,
         ])
 
-        // 必须放在最后：drawer 那一批刚被批量加了 InputTarget，这里再把 drawer_001 摘掉
+        // drawer_001 不在上面任何一批里——不给它加 InputTarget/Hover，直接把
+        // loadRoomIfNeeded 那次全场景 generateCollisionShapes(recursive:) 顺带
+        // 生成的碰撞体摘掉，让射线穿过去打到里面的器械。
         makeEntitiesTapTransparent(CollidableEntities.tapTransparent)
     }
 
@@ -428,6 +444,13 @@ class ORSceneViewModel {
         logger.info("[Hold] picked up drug: \(self.holdingItem)")
     }
 
+    /// 药品托盘选药的入口（见 DrugMenuView），选完自动关闭托盘。
+    func pickUpDrugFromMenu(_ drug: DrugMap.Drug) {
+        logger.info("[Tap] → pickUpDrug from drug menu")
+        pickUpDrug(drug)
+        isDrugMenuVisible = false
+    }
+
 }
 
 extension ORSceneViewModel {
@@ -504,6 +527,37 @@ extension ORSceneViewModel {
         for child in entity.children {
             removeInteraction(from: child)
         }
+    }
+
+    /// Blender 里的玻璃/透明塑料（面罩、气管导管、口咽管、喉罩、吸引瓶及管路等）
+    /// 靠折射（transmission）渲染，导出 USD 时 RealityKit 不支持折射，只剩
+    /// opacity = 0，Vision Pro 里就完全看不见了。这里把低于下限的透明度抬到一个
+    /// 看得见的半透明值。usdz 源头改对（玻璃材质给个非零 Alpha）之后这段可以删。
+    private static let minimumVisibleOpacity: Float = 0.4
+
+    /// 递归修整棵子树，返回改了几个材质
+    private func raiseInvisibleGlassOpacity(in entity: Entity) -> Int {
+        var fixedCount = 0
+        if var model = entity.components[ModelComponent.self] {
+            var changed = false
+            model.materials = model.materials.map { material in
+                guard var pbr = material as? PhysicallyBasedMaterial,
+                      case .transparent(let opacity) = pbr.blending,
+                      opacity.scale < Self.minimumVisibleOpacity else { return material }
+                pbr.blending = .transparent(opacity: .init(scale: Self.minimumVisibleOpacity, texture: opacity.texture))
+                changed = true
+                fixedCount += 1
+                return pbr
+            }
+            if changed {
+                entity.components.set(model)
+                logger.debug("[Material] \(entity.name) 透明度已抬高")
+            }
+        }
+        for child in entity.children {
+            fixedCount += raiseInvisibleGlassOpacity(in: child)
+        }
+        return fixedCount
     }
 
     private func hasCollidableDescendant(_ entity: Entity) -> Bool {

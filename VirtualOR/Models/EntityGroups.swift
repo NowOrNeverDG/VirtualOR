@@ -34,9 +34,12 @@ enum CollidableEntities {
 
     /// 对点击透明的实体：可拾取器械全都摆在 drawer_001 这一格里，而
     /// generateCollisionShapes 给抽屉生成的凸包会把开口封上、把里面的器械整个罩住，
-    /// 射线永远先打到抽屉。drawer_001 自己也没配药（DrugMap 只有 002~005），
-    /// 不需要接收点击，索性把它的碰撞体摘掉让射线穿过去。
+    /// 射线永远先打到抽屉。drawer_001 自己不用接收点击，摘掉碰撞体让射线穿过去。
     static var tapTransparent: [String] = [Drawer.drawer1.rawValue]
+
+    /// 药品抽屉：点任意一格都打开同一个药品托盘（DrugMenuView），在托盘里选具体药。
+    /// 抽屉和药品不再一一对应——16 种药按类别放在托盘里，不是 4 个抽屉装得下的。
+    static var drugDrawers: [String] = [Drawer.drawer2, .drawer3, .drawer4, .drawer5].map { $0.rawValue }
 
     /// 器械分组。`id`（英文名）兼作身份标识 —— intubationKit / coHoldableSets /
     /// 手持判定全部用它；`name(_:)` / `description(_:)` 只用于显示。
@@ -107,13 +110,10 @@ enum CollidableEntities {
     ]
 
     /// 教学模式点击气泡的说明文案：被点实体名 → 一句话描述「这是什么」。
-    /// 占位版，待医生审校后直接替换字符串；drawer / 器械走各自的 description(_:)，
-    /// 不另写一份，改名字或改药效只用改 instrumentGroups / DrugMap.drugs 一处。
+    /// 占位版，待医生审校后直接替换字符串；器械走 entityToGroup 的 description(_:)，
+    /// 不另写一份。具体药品不在这张表里——药名直接印在托盘按钮上，不需要气泡。
     /// 查不到就退回实体名本身，不会出现空气泡。
     static func interactionDescription(for entityName: String, language: DisplayLanguage) -> String {
-        if let drug = DrugMap.drug(inDrawer: entityName) {
-            return drug.description(language)
-        }
         if let group = entityToGroup[entityName] {
             return group.description(language)
         }
@@ -135,6 +135,9 @@ enum CollidableEntities {
         case Suction.pipeRollUpTop.rawValue, Suction.pipeRollUpBottom.rawValue, Suction.pipeConnection.rawValue:
             return zh ? "吸引器管路，点击收起" : "Suction tubing — tap to fold back"
         default:
+            if drugDrawers.contains(entityName) {
+                return zh ? "麻醉车药品抽屉，点击打开药品托盘" : "Drug drawer — tap to open the drug tray"
+            }
             if anesUnmasked.contains(entityName) {
                 return zh ? "面罩部件，收纳在麻醉机上" : "Mask parts, stored on the machine"
             }
@@ -154,15 +157,45 @@ enum CollidableEntities {
     }()
 }
 
-/// 抽屉 → 药品的映射。点对应抽屉即"拿起"该药品（HUD holdingItem 切换）；
-/// 手持药品点人体衣服（steve_clothes_002）即"服用"，触发对应 operation。
-/// 没有 3D 药品模型，所以拿药只更新 hold 文字 + 还原原本手持的器械（如果有）。
+/// 药品分类（对应开发需求文档附件1·麻醉车第一层，删掉局麻药后剩 6 类），只用于
+/// 径向菜单分两级展示——16 种药平铺一圈点不准，先选类别再选具体药。
+enum DrugCategory: String, CaseIterable {
+    case sedative, muscleRelaxant, analgesic, cardiovascular, other, antagonist
+
+    func name(_ language: DisplayLanguage) -> String {
+        let zh = language == .chinese
+        switch self {
+        case .sedative:        return zh ? "镇静药" : "Sedatives"
+        case .muscleRelaxant:  return zh ? "肌松药" : "Muscle Relaxants"
+        case .analgesic:       return zh ? "镇痛药" : "Analgesics"
+        case .cardiovascular:  return zh ? "心血管活性药" : "Cardiovascular"
+        case .other:           return zh ? "其他药物" : "Other"
+        case .antagonist:      return zh ? "拮抗药" : "Antagonists"
+        }
+    }
+}
+
+/// 药品清单。点药品抽屉打开托盘、在托盘里选药即"拿起"该药品（HUD holdingItem
+/// 切换）；手持药品点人体衣服（steve_clothes_002）即"服用"，触发对应 operation。
+/// 没有 3D 药品模型，拿药只更新 hold 文字 + 还原原本手持的器械（如果有）。
+/// 见 DrugMenuView。
+///
+/// 只有 propofolIV / muscleRelaxant / antagonistDrugs 这三个 operationId 在
+/// resource.json 里真的接了效果（有 flow）；没点名的药一律按 noEffectDrugs
+/// 处理——纯干扰选项，选错了生命体征不会有任何变化。这是按用户原话"除了有
+/// flow 的药，其他的药都是干扰选项，没有任何效果"实现的。
+///
+/// ⚠️ 舒更葡糖钠 / 新斯的明在真实临床上就是逆转肌松药的药物，这里按"没点名
+/// 过的药一律无效"的规则也归进了 noEffectDrugs——这点和真实药理不符，是刻意
+/// 简化还是应该也算"正确答案"，需要医生确认；真要改也只是把这两条的
+/// operationId 换成 muscleRelaxant 对应的拮抗效果（目前 course 数据里还没有
+/// "逆转肌松"这个 operation，真要支持得先在 resource.json 加一条）。
 enum DrugMap {
     /// `operationId` 兼作身份标识；`name(_:)` / `description(_:)` 只用于显示。
     struct Drug {
-        let drawer: String
         let nameEN: String
         let nameZH: String
+        let category: DrugCategory
         let operationId: String
         /// 教学模式点击气泡里的说明文案（占位版，待医生审校后直接替换字符串）
         let descriptionZH: String
@@ -178,18 +211,49 @@ enum DrugMap {
     }
 
     static let drugs: [Drug] = [
-        Drug(drawer: Drawer.drawer2.rawValue, nameEN: "Propofol", nameZH: "丙泊酚", operationId: "propofolIV",
+        // MARK: 镇静药
+        Drug(nameEN: "Midazolam", nameZH: "咪达唑仑", category: .sedative, operationId: "noEffectDrugs",
+             descriptionZH: "苯二氮䓬类镇静药，此情境下无效", descriptionEN: "Benzodiazepine sedative — no effect in this scenario"),
+        Drug(nameEN: "Propofol", nameZH: "丙泊酚", category: .sedative, operationId: "propofolIV",
              descriptionZH: "静脉麻醉药，用于诱导麻醉", descriptionEN: "IV anesthetic — used for induction"),
-        Drug(drawer: Drawer.drawer3.rawValue, nameEN: "Salbutamol", nameZH: "沙丁胺醇", operationId: "noEffectDrugs",
-             descriptionZH: "支气管扩张剂，此情境下无效", descriptionEN: "Bronchodilator — no effect in this scenario"),
-        Drug(drawer: Drawer.drawer4.rawValue, nameEN: "Flumazenil/Naloxone", nameZH: "氟马西尼/纳洛酮", operationId: "antagonistDrugs",
-             descriptionZH: "拮抗药，此情境下无效", descriptionEN: "Reversal agent — no effect in this scenario"),
-        Drug(drawer: Drawer.drawer5.rawValue, nameEN: "Muscle Relaxant", nameZH: "肌松药", operationId: "muscleRelaxant",
-             descriptionZH: "肌肉松弛药，为插管做准备", descriptionEN: "Muscle relaxant — prepares for intubation"),
-    ]
 
-    /// 该抽屉里放的药；drawer_001 没配药，返回 nil。
-    static func drug(inDrawer entityName: String) -> Drug? {
-        drugs.first { $0.drawer == entityName }
-    }
+        // MARK: 肌松药（有 flow）
+        Drug(nameEN: "Rocuronium", nameZH: "罗库溴铵", category: .muscleRelaxant, operationId: "muscleRelaxant",
+             descriptionZH: "非去极化肌松药，为插管做准备", descriptionEN: "Non-depolarizing muscle relaxant — prepares for intubation"),
+
+        // MARK: 镇痛药
+        Drug(nameEN: "Sufentanil", nameZH: "舒芬太尼", category: .analgesic, operationId: "noEffectDrugs",
+             descriptionZH: "阿片类镇痛药，此情境下无效", descriptionEN: "Opioid analgesic — no effect in this scenario"),
+
+        // MARK: 心血管活性药
+        Drug(nameEN: "Epinephrine", nameZH: "肾上腺素", category: .cardiovascular, operationId: "noEffectDrugs",
+             descriptionZH: "血管活性药，此情境下无效", descriptionEN: "Vasoactive agent — no effect in this scenario"),
+        Drug(nameEN: "Atropine", nameZH: "阿托品", category: .cardiovascular, operationId: "noEffectDrugs",
+             descriptionZH: "抗胆碱药，此情境下无效", descriptionEN: "Anticholinergic — no effect in this scenario"),
+        Drug(nameEN: "Norepinephrine", nameZH: "去甲肾上腺素", category: .cardiovascular, operationId: "noEffectDrugs",
+             descriptionZH: "血管活性药，此情境下无效", descriptionEN: "Vasoactive agent — no effect in this scenario"),
+        Drug(nameEN: "Dopamine", nameZH: "多巴胺", category: .cardiovascular, operationId: "noEffectDrugs",
+             descriptionZH: "血管活性药，此情境下无效", descriptionEN: "Vasoactive agent — no effect in this scenario"),
+        Drug(nameEN: "Esmolol", nameZH: "艾司洛尔", category: .cardiovascular, operationId: "noEffectDrugs",
+             descriptionZH: "短效 β 受体阻滞剂，此情境下无效", descriptionEN: "Short-acting beta-blocker — no effect in this scenario"),
+        Drug(nameEN: "Sodium Nitroprusside", nameZH: "硝普钠", category: .cardiovascular, operationId: "noEffectDrugs",
+             descriptionZH: "血管扩张药，此情境下无效", descriptionEN: "Vasodilator — no effect in this scenario"),
+
+
+        // MARK: 其他药物
+        Drug(nameEN: "Ondansetron", nameZH: "昂丹司琼", category: .other, operationId: "noEffectDrugs",
+             descriptionZH: "止吐药，此情境下无效", descriptionEN: "Antiemetic — no effect in this scenario"),
+        Drug(nameEN: "Methylprednisolone", nameZH: "甲泼尼龙琥珀酸钠注射液", category: .other, operationId: "noEffectDrugs",
+             descriptionZH: "糖皮质激素，此情境下无效", descriptionEN: "Corticosteroid — no effect in this scenario"),
+
+        // MARK: 拮抗药（氟马西尼/纳洛酮有 flow；舒更葡糖钠/新斯的明见上方 ⚠️ 说明）
+        Drug(nameEN: "Flumazenil", nameZH: "氟马西尼", category: .antagonist, operationId: "antagonistDrugs",
+             descriptionZH: "拮抗药，此情境下无效", descriptionEN: "Reversal agent — no effect in this scenario"),
+        Drug(nameEN: "Naloxone", nameZH: "纳洛酮", category: .antagonist, operationId: "antagonistDrugs",
+             descriptionZH: "拮抗药，此情境下无效", descriptionEN: "Reversal agent — no effect in this scenario"),
+        Drug(nameEN: "Sugammadex", nameZH: "舒更葡糖钠", category: .antagonist, operationId: "noEffectDrugs",
+             descriptionZH: "肌松拮抗药，此情境下按无效处理", descriptionEN: "Muscle relaxant reversal agent — treated as no effect here"),
+        Drug(nameEN: "Neostigmine", nameZH: "新斯的明", category: .antagonist, operationId: "noEffectDrugs",
+             descriptionZH: "抗胆碱酯酶药，此情境下按无效处理", descriptionEN: "Acetylcholinesterase inhibitor — treated as no effect here"),
+    ]
 }
